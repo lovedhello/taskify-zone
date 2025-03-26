@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { Button } from "@/components/ui/button";
@@ -74,11 +75,10 @@ const Profile = () => {
               <div className="flex flex-col md:flex-row items-center gap-6">
                 <div className="relative">
                   <Avatar className="w-24 h-24">
-                    <AvatarImage src={user?.image || "/images/kenji.jpg"} />
+                    <AvatarImage src={user?.picture || user?.image || "/images/kenji.jpg"} />
                     <AvatarFallback>{user?.name?.charAt(0)}</AvatarFallback>
                   </Avatar>
                   <Button 
-
                     size="icon" 
                     variant="secondary" 
                     className="absolute bottom-0 right-0 rounded-full"
@@ -300,4 +300,4 @@ const Profile = () => {
   );
 };
 
-export default Profile; 
+export default Profile;

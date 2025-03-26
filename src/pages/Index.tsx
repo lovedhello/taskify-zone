@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import { useNavigate, Link } from "react-router-dom";
 import MainLayout from "@/components/layout/MainLayout";
@@ -8,9 +9,9 @@ import LocationSearch from '@/components/search/LocationSearch';
 
 const Index = () => {
   const navigate = useNavigate();
-  const { user, isLoading } = useAuth();
+  const { user, loading } = useAuth();
   
-  if (isLoading) {
+  if (loading) {
     return <div>Loading...</div>;
   }
 

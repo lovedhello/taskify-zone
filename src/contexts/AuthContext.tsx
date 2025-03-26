@@ -1,9 +1,11 @@
+
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 interface AuthUser {
   email: string;
   name: string;
   picture?: string;
+  image?: string;
   sub?: string;
   is_host?: boolean;
   provider: 'google' | 'email';
