@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useLoadScript, GoogleMap, MarkerF } from '@react-google-maps/api';
+import ReviewsSection from "@/components/reviews/ReviewsSection";
+import { supabase } from "@/integrations/supabase/client";
 
 interface FoodExperience {
   id: number;
@@ -76,6 +78,8 @@ const FoodDetails = () => {
   const [isImageDialogOpen, setIsImageDialogOpen] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const imageContainerRef = useRef<HTMLDivElement>(null);
+  const [averageRating, setAverageRating] = useState(0);
+  const [reviewCount, setReviewCount] = useState(0);
   
   // Google Maps API loading
   const { isLoaded } = useLoadScript({
@@ -146,7 +150,52 @@ const FoodDetails = () => {
       }
     };
 
+    const fetchReviewStats = async () => {
+      if (!id) return;
+      
+      try {
+        // Get review count
+        const { count, error: countError } = await supabase
+          .from('reviews')
+          .select('id', { count: 'exact', head: false })
+          .eq('listing_id', id)
+          .eq('listing_type', 'food');
+          
+        if (countError) throw countError;
+        
+        // Get average rating
+        const { data: ratingData, error: ratingError } = await supabase
+          .rpc('get_average_rating', { 
+            p_listing_id: id, 
+            p_listing_type: 'food' 
+          });
+          
+        if (ratingError) {
+          // If the function doesn't exist yet, calculate average manually
+          const { data, error } = await supabase
+            .from('reviews')
+            .select('rating')
+            .eq('listing_id', id)
+            .eq('listing_type', 'food');
+            
+          if (error) throw error;
+          
+          if (data && data.length > 0) {
+            const sum = data.reduce((acc, review) => acc + review.rating, 0);
+            setAverageRating(sum / data.length);
+          }
+        } else {
+          setAverageRating(ratingData || 0);
+        }
+        
+        setReviewCount(count || 0);
+      } catch (error) {
+        console.error('Error fetching review stats:', error);
+      }
+    };
+
     fetchExperience();
+    fetchReviewStats();
   }, [id]);
 
   const toggleFavorite = () => {
@@ -396,50 +445,12 @@ const FoodDetails = () => {
               </TabsContent>
               
               <TabsContent value="reviews" className="space-y-8">
-                <Card className="p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-2xl font-semibold">Reviews</h2>
-                    <div className="flex items-center">
-                      <Star className="w-5 h-5 text-yellow-500 fill-yellow-500 mr-1" />
-                      <span className="font-medium text-lg">{experience.host.rating}</span>
-                      <span className="text-muted-foreground ml-1">
-                        ({experience.host.reviews} reviews)
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-6">
-                    {mockReviews.map((review) => (
-                      <div key={review.id} className="pb-6 border-b last:border-0">
-                        <div className="flex items-center gap-3 mb-3">
-                          <Avatar>
-                            <AvatarImage src={review.user.image} alt={review.user.name} />
-                            <AvatarFallback>{review.user.name.charAt(0)}</AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium">{review.user.name}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(review.date).toLocaleDateString('en-US', { 
-                                year: 'numeric', 
-                                month: 'long', 
-                                day: 'numeric' 
-                              })}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex mb-2">
-                          {[...Array(5)].map((_, i) => (
-                            <Star 
-                              key={i} 
-                              className={`w-4 h-4 ${i < review.rating ? "text-yellow-500 fill-yellow-500" : "text-gray-300"}`} 
-                            />
-                          ))}
-                        </div>
-                        <p className="text-muted-foreground">{review.comment}</p>
-                      </div>
-                    ))}
-                  </div>
-                </Card>
+                <ReviewsSection 
+                  listingId={id || ''} 
+                  listingType="food"
+                  averageRating={averageRating}
+                  reviewCount={reviewCount}
+                />
               </TabsContent>
               
               <TabsContent value="location" className="space-y-8">
@@ -600,4 +611,4 @@ const FoodDetails = () => {
   );
 };
 
-export default FoodDetails; 
+export default FoodDetails;
