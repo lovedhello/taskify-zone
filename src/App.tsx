@@ -1,52 +1,118 @@
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { GoogleOAuthProvider } from '@react-oauth/google';
+import Index from "@/pages/Index";
+import Food from "@/pages/Food";
+import FoodDetails from "@/pages/FoodDetails";
+import Stays from "@/pages/Stays";
+import StayDetails from "@/pages/StayDetails";
+import BecomeHost from "@/pages/BecomeHost";
+import HostFood from "@/pages/host/HostFood";
+import HostStay from "@/pages/host/HostStay";
+import Login from "@/pages/auth/Login";
+import Signup from "@/pages/auth/Signup";
+import Terms from "@/pages/Terms";
+import Privacy from "@/pages/Privacy";
+import Help from "@/pages/Help";
+import Safety from "@/pages/Safety";
+import HostDashboard from "@/pages/host/HostDashboard";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import ProtectedRoute from "@/components/ProtectedRoute";
+import { useEffect } from "react";
+import Profile from "@/pages/Profile";
 
-import { useState } from 'react';
-import { Toaster } from "@/components/ui/toaster";
-import TaskList from "@/components/TaskList";
-import TaskForm from "@/components/TaskForm";
-import { Task } from "@/types/task";
+const HostRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  const navigate = useNavigate();
 
-function App() {
-  const [tasks, setTasks] = useState<Task[]>([]);
+  useEffect(() => {
+    if (!loading && (!user || !user.is_host)) {
+      navigate('/');
+    }
+  }, [user, loading, navigate]);
 
-  const addTask = (task: Task) => {
-    setTasks([...tasks, { ...task, id: Date.now().toString() }]);
-  };
+  if (loading) {
+    return <div>Loading...</div>;
+  }
 
-  const deleteTask = (id: string) => {
-    setTasks(tasks.filter(task => task.id !== id));
-  };
+  return user && user.is_host ? <>{children}</> : null;
+};
 
-  const toggleComplete = (id: string) => {
-    setTasks(tasks.map(task => 
-      task.id === id ? { ...task, completed: !task.completed } : task
-    ));
-  };
-
+const App = () => {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-muted p-4">
-      <div className="container mx-auto max-w-4xl">
-        <header className="my-8 text-center">
-          <h1 className="text-4xl font-bold text-foreground mb-2">TaskManager</h1>
-          <p className="text-muted-foreground">Organize your life, one task at a time</p>
-        </header>
-        
-        <div className="bg-card/80 backdrop-blur-sm rounded-lg shadow-lg p-6 mb-8">
-          <h2 className="text-2xl font-semibold mb-4">Add New Task</h2>
-          <TaskForm onAddTask={addTask} />
-        </div>
-
-        <div className="bg-card/80 backdrop-blur-sm rounded-lg shadow-lg p-6">
-          <h2 className="text-2xl font-semibold mb-4">Your Tasks</h2>
-          <TaskList 
-            tasks={tasks} 
-            onDeleteTask={deleteTask} 
-            onToggleComplete={toggleComplete} 
-          />
-        </div>
-      </div>
-      <Toaster />
-    </div>
+    <GoogleOAuthProvider 
+      clientId="492095795324-ums4dgnt4b168vndktsqkkbc4l5o189n.apps.googleusercontent.com"
+    >
+      <AuthProvider>
+        <Router>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/food" element={<Food />} />
+            <Route path="/foods/:id" element={<FoodDetails />} />
+            <Route path="/food/:id" element={<FoodDetails />} />
+            <Route path="/stays" element={<Stays />} />
+            <Route path="/stays/:id" element={<StayDetails />} />
+            <Route path="/become-host" element={<BecomeHost />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/help" element={<Help />} />
+            <Route path="/safety" element={<Safety />} />
+            <Route
+              path="/host/dashboard"
+              element={
+                <ProtectedRoute>
+                  <HostRoute>
+                    <HostDashboard />
+                  </HostRoute>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/host/food"
+              element={
+                <ProtectedRoute>
+                  <HostFood />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/host/food/:id"
+              element={
+                <ProtectedRoute>
+                  <HostFood />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/host/stay"
+              element={
+                <ProtectedRoute>
+                  <HostStay />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/host/stay/:id"
+              element={
+                <ProtectedRoute>
+                  <HostStay />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              }
+            />
+          </Routes>
+        </Router>
+      </AuthProvider>
+    </GoogleOAuthProvider>
   );
-}
+};
 
 export default App;
