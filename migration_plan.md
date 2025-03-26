@@ -3,7 +3,7 @@
 ## Overview
 This document outlines the migration plan from the current Flask/MySQL backend to a Supabase backend with Clerk authentication while preserving the existing React/TypeScript frontend.
 
-## Current System Architecture
+##
 - **Frontend**: React + TypeScript + Vite + ShadCN UI (to be preserved)
 - **Backend**: Flask (Python) + MySQL (to be replaced)
 - **Authentication**: Custom JWT with Google OAuth (to be replaced)
