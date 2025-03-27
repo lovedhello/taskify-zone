@@ -36,10 +36,18 @@ const ReviewForm = ({ listingId, listingType, onSuccess }: ReviewFormProps) => {
     setIsSubmitting(true);
     
     try {
+      // Get the current user's ID from Supabase auth session
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+      
+      if (!userId) {
+        throw new Error("User not authenticated");
+      }
+      
       const { error } = await supabase
         .from('reviews')
         .insert({
-          user_id: user.id,
+          user_id: userId,
           listing_id: listingId,
           listing_type: listingType,
           rating,

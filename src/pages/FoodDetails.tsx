@@ -81,13 +81,11 @@ const FoodDetails = () => {
   const [averageRating, setAverageRating] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
   
-  // Google Maps API loading
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE',
     libraries: ['places']
   });
-  
-  // Mock reviews data - in a real app, this would come from the API
+
   const mockReviews: Review[] = [
     {
       id: 1,
@@ -112,7 +110,6 @@ const FoodDetails = () => {
     }
   ];
 
-  // Mock location coordinates - in a real app, this would come from the API
   const locationCoords = {
     lat: 40.7128,
     lng: -74.0060
@@ -130,7 +127,6 @@ const FoodDetails = () => {
         const response = await fetch(`${import.meta.env.VITE_API_URL}/food-experiences/${id}`);
         if (!response.ok) throw new Error('Failed to fetch experience');
         const data = await response.json();
-        // Process the images URLs
         const processedData = {
           ...data,
           images: data.images.map((img: { url: string; order?: number }, index: number) => ({
@@ -154,28 +150,25 @@ const FoodDetails = () => {
       if (!id) return;
       
       try {
-        // Get review count
         const { count, error: countError } = await supabase
           .from('reviews')
           .select('id', { count: 'exact', head: false })
-          .eq('listing_id', id)
+          .eq('listing_id', id.toString())
           .eq('listing_type', 'food');
           
         if (countError) throw countError;
         
-        // Get average rating
         const { data: ratingData, error: ratingError } = await supabase
           .rpc('get_average_rating', { 
-            p_listing_id: id, 
+            p_listing_id: id.toString(), 
             p_listing_type: 'food' 
           });
           
         if (ratingError) {
-          // If the function doesn't exist yet, calculate average manually
           const { data, error } = await supabase
             .from('reviews')
             .select('rating')
-            .eq('listing_id', id)
+            .eq('listing_id', id.toString())
             .eq('listing_type', 'food');
             
           if (error) throw error;
@@ -235,7 +228,6 @@ const FoodDetails = () => {
   return (
     <MainLayout>
       <div className="container mx-auto px-4 py-8">
-        {/* Header Section */}
         <div className="mb-8">
           <div className="flex flex-wrap justify-between items-start gap-4 mb-4">
             <div>
@@ -290,12 +282,10 @@ const FoodDetails = () => {
           </div>
         </div>
 
-        {/* Enhanced Image Gallery - Compact Version */}
         <div className="mb-12">
           {experience.images.length > 0 && (
             <div className="relative" ref={imageContainerRef}>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2 rounded-xl overflow-hidden max-h-[400px]">
-                {/* Main image */}
                 <div className="col-span-2 aspect-video relative overflow-hidden rounded-lg">
                   <img
                     src={experience.images[0].url}
@@ -311,7 +301,6 @@ const FoodDetails = () => {
                   </div>
                 </div>
                 
-                {/* Thumbnail grid */}
                 <div className="hidden md:grid grid-rows-2 gap-2">
                   {experience.images.slice(1, 3).map((image, index) => (
                     <div key={index} className="relative overflow-hidden rounded-lg">
@@ -337,7 +326,6 @@ const FoodDetails = () => {
                 </div>
               </div>
               
-              {/* Full-screen image dialog */}
               <Dialog open={isImageDialogOpen} onOpenChange={setIsImageDialogOpen}>
                 <DialogContent className="max-w-5xl w-full p-0 bg-black/90">
                   <div className="relative h-[80vh]">
@@ -360,7 +348,6 @@ const FoodDetails = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-8">
-          {/* Left Column */}
           <div>
             <Tabs defaultValue="about" className="mb-12">
               <TabsList className="mb-6">
@@ -466,7 +453,6 @@ const FoodDetails = () => {
                     </p>
                   </div>
                   
-                  {/* Google Maps Component */}
                   <div className="rounded-lg overflow-hidden mb-6 h-[300px]">
                     {!isLoaded ? (
                       <div className="w-full h-full bg-gray-100 flex items-center justify-center">
@@ -521,9 +507,7 @@ const FoodDetails = () => {
             </Tabs>
           </div>
 
-          {/* Right Column - Contact Card */}
           <div>
-            {/* Main contact card - sticky */}
             <Card className="p-6 sticky top-24 mb-6">
               <div className="flex justify-between items-center mb-6">
                 <div>
@@ -581,7 +565,6 @@ const FoodDetails = () => {
               </p>
             </Card>
             
-            {/* Host info card - fixed position at bottom of sidebar */}
             <Card className="p-6 bg-white border shadow-md rounded-lg mt-auto">
               <div className="flex items-center gap-4">
                 <Avatar className="w-12 h-12">

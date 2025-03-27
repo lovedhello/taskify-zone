@@ -6,16 +6,18 @@ import { Star, Loader2 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { format } from "date-fns";
 
+interface ReviewUser {
+  display_name?: string;
+  email?: string;
+}
+
 interface Review {
   id: string;
   rating: number;
   comment: string;
   created_at: string;
   user_id: string;
-  user: {
-    display_name?: string;
-    email?: string;
-  };
+  user?: ReviewUser;
 }
 
 interface ReviewsListProps {
@@ -40,18 +42,36 @@ const ReviewsList = ({ listingId, listingType, refreshTrigger = 0 }: ReviewsList
             rating,
             comment,
             created_at,
-            user_id,
-            user:user_id (
-              email,
-              display_name:raw_user_meta_data->display_name
-            )
+            user_id
           `)
           .eq('listing_id', listingId)
           .eq('listing_type', listingType)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
-        setReviews(data || []);
+        
+        // Fetch user info separately for each review
+        if (data) {
+          const reviewsWithUsers = await Promise.all(
+            data.map(async (review) => {
+              const { data: userData } = await supabase
+                .from('profiles')
+                .select('email, display_name')
+                .eq('id', review.user_id)
+                .single();
+              
+              return {
+                ...review,
+                user: userData || { 
+                  display_name: 'Anonymous',
+                  email: undefined 
+                }
+              };
+            })
+          );
+          
+          setReviews(reviewsWithUsers);
+        }
       } catch (err) {
         console.error('Error fetching reviews:', err);
         setError('Failed to load reviews');
@@ -90,7 +110,7 @@ const ReviewsList = ({ listingId, listingType, refreshTrigger = 0 }: ReviewsList
   return (
     <div className="space-y-6">
       {reviews.map((review) => {
-        const name = review.user?.display_name || review.user?.email?.split('@')[0] || 'Anonymous';
+        const name = review.user?.display_name || review.user_id.substring(0, 8) || 'Anonymous';
         const initials = name.charAt(0).toUpperCase();
         
         return (
