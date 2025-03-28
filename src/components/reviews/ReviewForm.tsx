@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -16,7 +15,7 @@ interface ReviewFormProps {
 const ReviewForm = ({ listingId, listingType, onSuccess }: ReviewFormProps) => {
   const { user } = useAuth();
   const [rating, setRating] = useState<number>(0);
-  const [comment, setComment] = useState<string>("");
+  const [content, setContent] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [hoverRating, setHoverRating] = useState<number>(0);
 
@@ -47,18 +46,18 @@ const ReviewForm = ({ listingId, listingType, onSuccess }: ReviewFormProps) => {
       const { error } = await supabase
         .from('reviews')
         .insert({
-          user_id: userId,
-          listing_id: listingId,
-          listing_type: listingType,
+          author_id: userId,
+          target_id: listingId,
+          target_type: listingType === 'food' ? 'food_experience' : 'stay',
           rating,
-          comment
+          content: content
         });
       
       if (error) throw error;
       
       toast.success("Review submitted successfully!");
       setRating(0);
-      setComment("");
+      setContent("");
       
       if (onSuccess) {
         onSuccess();
@@ -108,13 +107,13 @@ const ReviewForm = ({ listingId, listingType, onSuccess }: ReviewFormProps) => {
       </div>
       
       <div className="space-y-2">
-        <label htmlFor="comment" className="block text-sm font-medium">
+        <label htmlFor="content" className="block text-sm font-medium">
           Your Review
         </label>
         <Textarea
-          id="comment"
-          value={comment}
-          onChange={(e) => setComment(e.target.value)}
+          id="content"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
           placeholder="Share your experience..."
           rows={4}
         />

@@ -3,9 +3,7 @@ import MainLayout from "@/components/layout/MainLayout";
 import FilterSidebar from "@/components/filters/FilterSidebar";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Filter, ChefHat, Tag } from "lucide-react";
-import { mockFoodExperiences, categories } from "@/data/mockData";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Search, Filter, ChefHat } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { LoadingSpinner } from '@/components/ui/loading';
 import { SortSelect } from '@/components/filters/SortSelect';
@@ -13,44 +11,24 @@ import { FoodCard } from "@/components/cards/FoodCard";
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { Badge } from "@/components/ui/badge";
 
-interface ImageData {
-  url: string;
-  full_url?: string;
-}
+// Import our service functions
+import { getFoodExperiences, getFoodCategories } from "@/services/foodExperienceService";
+import type { FoodExperience, ImageData } from "@/types/food";
+import type { FilterOption } from "@/types/filters";
 
-interface FoodExperience {
-  id: number;
-  title: string;
-  description: string;
-  images: ImageData[];
-  price_per_person: number;
-  cuisine_type: string;
-  host: {
-    name: string;
-    rating: number;
-    reviews: number;
-  };
-  location_name: string;
-  details: {
-    duration: string;
-    groupSize: string;
-    includes: string[];
-    language: string;
-    location: string;
-  };
-}
+// Define default cuisine types
+const defaultCuisineTypes = [
+  { id: 'Italian', label: 'Italian', count: 0 },
+  { id: 'Mexican', label: 'Mexican', count: 0 },
+  { id: 'Japanese', label: 'Japanese', count: 0 },
+  { id: 'Indian', label: 'Indian', count: 0 },
+  { id: 'Thai', label: 'Thai', count: 0 },
+  { id: 'Chinese', label: 'Chinese', count: 0 },
+  { id: 'Mediterranean', label: 'Mediterranean', count: 0 },
+  { id: 'French', label: 'French', count: 0 }
+];
 
-interface CuisineCount {
-  id: string;
-  label: string;
-  count: number;
-}
-
-const cuisineTypes = categories.map(cat => ({
-  id: cat.title,  // Use the title as the ID to match backend values
-  label: cat.title,
-  count: cat.count,
-}));
+const cuisineTypes = defaultCuisineTypes;
 
 const Food = () => {
   const [searchParams] = useSearchParams();
@@ -60,36 +38,29 @@ const Food = () => {
   const [searchTitle, setSearchTitle] = useState("");
   const [selectedCuisines, setSelectedCuisines] = useState<string[]>([]);
   const [showFilters, setShowFilters] = useState(false);
-  const [cuisineCounts, setCuisineCounts] = useState<CuisineCount[]>(
-    categories.map(cat => ({
-      id: cat.title,
-      label: cat.title,
-      count: 0
-    }))
-  );
+  const [cuisineCounts, setCuisineCounts] = useState<FilterOption[]>(defaultCuisineTypes);
   const navigate = useNavigate();
 
   const getFullImageUrl = (url: string) => {
     if (!url) return '/default-food.jpg';
     if (url.startsWith('http')) return url;
-    return `${import.meta.env.VITE_API_URL}/${url}`;
+    // If image is stored in Supabase Storage
+    if (url.startsWith('food-experience-images/')) {
+      return `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/${url}`;
+    }
+    return url;
   };
 
-  // Fetch cuisine counts from the API
+  // Fetch cuisine counts from Supabase
   const fetchCuisineCounts = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/food-categories`);
-      if (response.ok) {
-        const data = await response.json();
-        if (Array.isArray(data)) {
-          const formattedCounts = data.map(item => ({
-            id: item.cuisine_type,
-            label: item.cuisine_type,
-            count: item.count
-          }));
-          setCuisineCounts(formattedCounts);
-        }
-      }
+      const data = await getFoodCategories();
+      const formattedCounts = data.map(item => ({
+        id: item.cuisine_type,
+        label: item.cuisine_type,
+        count: item.count
+      }));
+      setCuisineCounts(formattedCounts);
     } catch (error) {
       console.error('Error fetching cuisine counts:', error);
     }
@@ -107,23 +78,23 @@ const Food = () => {
   }, []);
 
   useEffect(() => {
-    const params: Record<string, string> = {
+    const filters: Record<string, any> = {
       sort: sortBy
     };
 
     // Add zipcode from URL if present
     const zipcode = searchParams.get('zipcode');
     if (zipcode) {
-      params.zipcode = zipcode;
+      filters.zipcode = zipcode;
     }
     
     // Add cuisine types from URL if present
     const cuisineTypesParam = searchParams.get('cuisine_types');
     if (cuisineTypesParam) {
-      params.cuisine_types = cuisineTypesParam;
+      filters.cuisine_types = cuisineTypesParam.split(',');
     }
 
-    fetchExperiences(params);
+    fetchExperiences(filters);
   }, [searchParams, sortBy]);
 
   // Add effect to trigger search when selectedCuisines changes
@@ -133,43 +104,22 @@ const Food = () => {
     }
   }, [selectedCuisines]);
 
-  const fetchExperiences = async (params = {}) => {
+  const fetchExperiences = async (filters = {}) => {
     try {
       setLoading(true);
-      const queryParams = new URLSearchParams(params);
-      const url = `${import.meta.env.VITE_API_URL}/food-experiences?${queryParams}`;
+      console.log('Fetching experiences with filters:', filters);
       
-      console.log('Fetching experiences with params:', params);
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error('Failed to fetch experiences');
-      }
+      const data = await getFoodExperiences(filters);
       
-      const data = await response.json();
-      // Process the images URLs and ensure the data structure matches what FoodCard expects
-      const processedData = data.map((exp: any) => ({
+      // Process the images URLs
+      const processedData = data.map((exp) => ({
         ...exp,
-        images: Array.isArray(exp.images) 
-          ? exp.images.map((img: any) => ({
-              url: typeof img === 'string' 
-                ? getFullImageUrl(img) 
-                : getFullImageUrl(img.url || '')
-            }))
-          : [],
-        // Ensure required fields exist
-        host: exp.host || {
-          name: 'Unknown Host',
-          rating: 0,
-          reviews: 0
-        },
-        details: exp.details || {
-          duration: '',
-          groupSize: '',
-          includes: [],
-          language: '',
-          location: ''
-        }
+        images: exp.images.map(img => ({
+          ...img,
+          url: getFullImageUrl(img.url)
+        }))
       }));
+      
       setExperiences(processedData);
     } catch (error) {
       console.error('Error fetching experiences:', error);
@@ -179,27 +129,27 @@ const Food = () => {
   };
 
   const handleSearch = () => {
-    const params: Record<string, string> = {
+    const filters: Record<string, any> = {
       sort: sortBy
     };
 
     // Add title search if present
     if (searchTitle.trim()) {
-      params.title = searchTitle.trim();
+      filters.title = searchTitle.trim();
     }
 
     // Add cuisine types if selected
     if (selectedCuisines.length > 0) {
-      params.cuisine_types = selectedCuisines.join(',');
+      filters.cuisine_types = selectedCuisines;
     }
 
     // Add zipcode from URL if present
     const zipcode = searchParams.get('zipcode');
     if (zipcode) {
-      params.zipcode = zipcode;
+      filters.zipcode = zipcode;
     }
 
-    fetchExperiences(params);
+    fetchExperiences(filters);
   };
 
   const handleCuisineChange = (cuisineId: string) => {

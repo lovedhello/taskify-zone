@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -14,9 +13,9 @@ interface ReviewUser {
 interface Review {
   id: string;
   rating: number;
-  comment: string;
+  content: string;
   created_at: string;
-  user_id: string;
+  author_id: string;
   user?: ReviewUser;
 }
 
@@ -40,12 +39,12 @@ const ReviewsList = ({ listingId, listingType, refreshTrigger = 0 }: ReviewsList
           .select(`
             id,
             rating,
-            comment,
+            content,
             created_at,
-            user_id
+            author_id
           `)
-          .eq('listing_id', listingId)
-          .eq('listing_type', listingType)
+          .eq('target_id', listingId)
+          .eq('target_type', listingType === 'food' ? 'food_experience' : 'stay')
           .order('created_at', { ascending: false });
 
         if (error) throw error;
@@ -57,7 +56,7 @@ const ReviewsList = ({ listingId, listingType, refreshTrigger = 0 }: ReviewsList
               const { data: userData } = await supabase
                 .from('profiles')
                 .select('email, display_name')
-                .eq('id', review.user_id)
+                .eq('id', review.author_id)
                 .single();
               
               return {
@@ -110,7 +109,7 @@ const ReviewsList = ({ listingId, listingType, refreshTrigger = 0 }: ReviewsList
   return (
     <div className="space-y-6">
       {reviews.map((review) => {
-        const name = review.user?.display_name || review.user_id.substring(0, 8) || 'Anonymous';
+        const name = review.user?.display_name || review.author_id.substring(0, 8) || 'Anonymous';
         const initials = name.charAt(0).toUpperCase();
         
         return (
@@ -135,8 +134,8 @@ const ReviewsList = ({ listingId, listingType, refreshTrigger = 0 }: ReviewsList
                 />
               ))}
             </div>
-            {review.comment && (
-              <p className="text-muted-foreground">{review.comment}</p>
+            {review.content && (
+              <p className="text-muted-foreground">{review.content}</p>
             )}
             <Separator className="mt-6" />
           </div>

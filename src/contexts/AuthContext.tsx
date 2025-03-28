@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
@@ -27,6 +26,17 @@ interface AuthContextType {
   session: Session | null;
 }
 
+// Define the profile interface to match the database structure
+interface Profile {
+  id: string;
+  name: string;
+  avatar_url?: string;
+  is_host: boolean;
+  created_at?: string;
+  updated_at?: string;
+  is_admin?: boolean;
+}
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -42,28 +52,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return undefined;
   };
 
+  // Extract user data from Supabase User object
+  const extractUserData = (supabaseUser: User): AuthUser => {
+    return {
+      email: supabaseUser.email || '',
+      name: supabaseUser.user_metadata.name || supabaseUser.user_metadata.full_name || '',
+      picture: supabaseUser.user_metadata.picture || supabaseUser.user_metadata.avatar_url,
+      is_host: supabaseUser.user_metadata.is_host || false,
+      provider: supabaseUser.app_metadata.provider === 'google' ? 'google' : 'email'
+    };
+  };
+
   useEffect(() => {
     // Set up the auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, currentSession) => {
+        console.log('Auth state changed:', event);
         // Only do synchronous updates to prevent potential deadlocks
         setSession(currentSession);
         
         if (currentSession?.user) {
-          const userData: AuthUser = {
-            email: currentSession.user.email || '',
-            name: currentSession.user.user_metadata.name || '',
-            picture: currentSession.user.user_metadata.picture,
-            is_host: currentSession.user.user_metadata.is_host,
-            provider: currentSession.user.app_metadata.provider === 'google' ? 'google' : 'email'
-          };
+          const userData = extractUserData(currentSession.user);
           setUser(userData);
           setIsAuthenticated(true);
-          
-          // Use setTimeout to defer the profile fetch to avoid deadlocks
-          setTimeout(() => {
-            fetchUserProfile(currentSession.user.id);
-          }, 0);
         } else {
           setUser(null);
           setIsAuthenticated(false);
@@ -76,17 +87,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(currentSession);
       
       if (currentSession?.user) {
-        const userData: AuthUser = {
-          email: currentSession.user.email || '',
-          name: currentSession.user.user_metadata.name || '',
-          picture: currentSession.user.user_metadata.picture,
-          is_host: currentSession.user.user_metadata.is_host,
-          provider: currentSession.user.app_metadata.provider === 'google' ? 'google' : 'email'
-        };
+        const userData = extractUserData(currentSession.user);
         setUser(userData);
         setIsAuthenticated(true);
-        
-        fetchUserProfile(currentSession.user.id);
       }
       
       setLoading(false);
@@ -96,36 +99,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       subscription.unsubscribe();
     };
   }, []);
-
-  const fetchUserProfile = async (userId: string) => {
-    try {
-      // Check if we have a profiles table with additional user data
-      const { data: profileData, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        console.error('Error fetching user profile:', error);
-        return;
-      }
-
-      if (profileData) {
-        setUser(currentUser => {
-          if (!currentUser) return null;
-          return {
-            ...currentUser,
-            name: profileData.name || currentUser.name,
-            picture: profileData.avatar_url || currentUser.picture,
-            is_host: profileData.is_host || currentUser.is_host
-          };
-        });
-      }
-    } catch (error) {
-      console.error('Error in fetchUserProfile:', error);
-    }
-  };
 
   const loginWithEmail = async (email: string, password: string) => {
     try {
@@ -146,18 +119,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (name: string, email: string, password: string) => {
     try {
+      console.log('Registering user with name:', name);
+      
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
-            name,
+            name, // Store name in user_metadata
+            full_name: name, // Also store as full_name for compatibility
             is_host: false
           }
         }
       });
 
       if (error) throw error;
+
+      // Log the user metadata that was set
+      console.log('User registered with metadata:', data?.user?.user_metadata);
 
       toast.success('Registration successful!');
       
@@ -192,9 +171,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshUser = async () => {
     try {
-      if (!session?.user?.id) return;
+      if (!session?.user) return;
       
-      await fetchUserProfile(session.user.id);
+      // Refresh the user data from Supabase
+      const { data, error } = await supabase.auth.getUser();
+      
+      if (error) {
+        console.error('Error refreshing user data:', error);
+        return;
+      }
+      
+      if (data?.user) {
+        // Get user data from auth
+        const userData = extractUserData(data.user);
+        
+        // Also check the profiles table for accurate is_host status
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('is_host')
+          .eq('id', data.user.id)
+          .single();
+          
+        if (!profileError && profile) {
+          // Update is_host from the profiles table (source of truth)
+          userData.is_host = profile.is_host;
+          
+          // Also update the user metadata if it's different to keep in sync
+          if (profile.is_host !== data.user.user_metadata.is_host) {
+            console.log('Updating user metadata with is_host:', profile.is_host);
+            await supabase.auth.updateUser({
+              data: { is_host: profile.is_host }
+            });
+          }
+        }
+        
+        setUser(userData);
+      }
     } catch (error) {
       console.error('Error refreshing user data:', error);
     }

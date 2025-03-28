@@ -2,85 +2,117 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/contexts/AuthContext";
 import { 
   Home, Utensils, Hotel, Plus, ArrowRight, 
-  DollarSign, Users, Calendar, Star 
+  DollarSign, Users, Calendar, Star, RefreshCw
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
-interface Experience {
-  id: number;
+// Import our service function
+import { getHostFoodExperiences, changeFoodExperienceStatus, deleteFoodExperience } from "@/services/hostService";
+
+// Define a type that matches what the backend returns
+interface HostFoodExperience {
+  id: string | number;
   title: string;
-  status: string;
+  description: string;
+  status: 'draft' | 'published' | 'archived';
+  images: {
+    id: string;
+    url: string;
+    order: number;
+    is_primary: boolean;
+  }[];
   price_per_person: number;
+  cuisine_type: string;
+  menu_description: string;
+  location_name: string;
   created_at: string;
-  total_bookings?: number;
-}
-
-interface Stay {
-  id: number;
-  title: string;
-  status: string;
-  price_per_night: number;
-  created_at: string;
-  total_bookings?: number;
+  updated_at: string;
+  details: {
+    duration: string;
+    groupSize: string;
+    includes: string[];
+    language: string;
+    location: string;
+  };
 }
 
 const HostDashboard = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const [foodExperiences, setFoodExperiences] = useState<Experience[]>([]);
-  const [stays, setStays] = useState<Stay[]>([]);
+  const [foodExperiences, setFoodExperiences] = useState<HostFoodExperience[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchListings = async () => {
-      try {
-        setLoading(true);
-        const token = localStorage.getItem('authToken');
-        
-        const [foodRes, staysRes] = await Promise.all([
-          fetch(`${import.meta.env.VITE_API_URL}/host/food-experiences`, {
-            headers: { Authorization: `Bearer ${token}` }
-          }),
-          fetch(`${import.meta.env.VITE_API_URL}/host/stays`, {
-            headers: { Authorization: `Bearer ${token}` }
-          })
-        ]);
-
-        if (!foodRes.ok || !staysRes.ok) {
-          throw new Error('Failed to fetch listings');
-        }
-
-        const [foodData, staysData] = await Promise.all([
-          foodRes.json(),
-          staysRes.json()
-        ]);
-
-        setFoodExperiences(foodData || []);
-        setStays(staysData || []);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
-        setFoodExperiences([]);
-        setStays([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchListings();
+    fetchFoodExperiences();
   }, []);
+
+  const fetchFoodExperiences = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getHostFoodExperiences();
+      setFoodExperiences(data);
+    } catch (err) {
+      console.error('Error fetching food experiences:', err);
+      setError('Failed to load your food experiences. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStatusChange = async (id: string | number, status: 'draft' | 'published' | 'archived') => {
+    try {
+      await changeFoodExperienceStatus(id.toString(), status);
+      // Update local state
+      setFoodExperiences(prev => 
+        prev.map(exp => 
+          exp.id === id ? { ...exp, status } : exp
+        )
+      );
+    } catch (err) {
+      console.error('Error changing status:', err);
+      setError('Failed to update status. Please try again.');
+    }
+  };
+
+  const handleDelete = async (id: string | number) => {
+    if (!window.confirm('Are you sure you want to delete this food experience? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await deleteFoodExperience(id.toString());
+      // Remove from local state
+      setFoodExperiences(prev => prev.filter(exp => exp.id !== id));
+    } catch (err) {
+      console.error('Error deleting food experience:', err);
+      setError('Failed to delete food experience. Please try again.');
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case 'published':
-        return 'text-green-600 bg-green-100';
+        return 'bg-green-100 text-green-800';
       case 'draft':
-        return 'text-orange-600 bg-orange-100';
+        return 'bg-yellow-100 text-yellow-800';
+      case 'archived':
+        return 'bg-gray-100 text-gray-800';
       default:
-        return 'text-gray-600 bg-gray-100';
+        return 'bg-blue-100 text-blue-800';
     }
+  };
+
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'short', 
+      day: 'numeric'
+    });
   };
 
   if (loading) {
@@ -91,10 +123,6 @@ const HostDashboard = () => {
     );
   }
 
-  if (error) {
-    return <div>Error: {error}</div>;
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-sage-50 to-terracotta-50 p-6">
       {/* Header Section */}
@@ -102,7 +130,7 @@ const HostDashboard = () => {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Host Dashboard</h1>
-            <p className="text-gray-600">Welcome back, {user?.name}!</p>
+            <p className="text-gray-600">Manage your food experiences and stays</p>
           </div>
           <div className="space-x-4">
             <Button 
@@ -114,7 +142,7 @@ const HostDashboard = () => {
               Back to Home
             </Button>
             <Button 
-              onClick={() => navigate('/host/food')}
+              onClick={() => navigate('/host/food/new')}
               className="flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
@@ -123,6 +151,12 @@ const HostDashboard = () => {
           </div>
         </div>
       </div>
+
+      {error && (
+        <Alert variant="destructive" className="mb-8 max-w-7xl mx-auto">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
       {/* Stats Overview */}
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
@@ -133,8 +167,10 @@ const HostDashboard = () => {
                 <DollarSign className="w-6 h-6 text-blue-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Total Revenue</p>
-                <p className="text-2xl font-bold">$1,234</p>
+                <p className="text-sm text-gray-600">Active Listings</p>
+                <p className="text-2xl font-bold">
+                  {foodExperiences.filter(exp => exp.status === 'published').length}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -146,8 +182,10 @@ const HostDashboard = () => {
                 <Users className="w-6 h-6 text-green-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Total Guests</p>
-                <p className="text-2xl font-bold">42</p>
+                <p className="text-sm text-gray-600">Draft Listings</p>
+                <p className="text-2xl font-bold">
+                  {foodExperiences.filter(exp => exp.status === 'draft').length}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -159,9 +197,9 @@ const HostDashboard = () => {
                 <Calendar className="w-6 h-6 text-purple-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Active Listings</p>
+                <p className="text-sm text-gray-600">Total Listings</p>
                 <p className="text-2xl font-bold">
-                  {foodExperiences.length + stays.length}
+                  {foodExperiences.length}
                 </p>
               </div>
             </div>
@@ -174,8 +212,10 @@ const HostDashboard = () => {
                 <Star className="w-6 h-6 text-yellow-600" />
               </div>
               <div>
-                <p className="text-sm text-gray-600">Avg. Rating</p>
-                <p className="text-2xl font-bold">4.8</p>
+                <p className="text-sm text-gray-600">Archived</p>
+                <p className="text-2xl font-bold">
+                  {foodExperiences.filter(exp => exp.status === 'archived').length}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -194,7 +234,7 @@ const HostDashboard = () => {
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => navigate('/host/food')}
+                onClick={() => navigate('/host/food/new')}
                 className="flex items-center gap-2"
               >
                 Add New <Plus className="w-4 h-4" />
@@ -203,28 +243,96 @@ const HostDashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="divide-y">
-              {foodExperiences.map((exp) => (
-                <div 
-                  key={exp.id}
-                  className="py-4 flex items-center justify-between hover:bg-gray-50 rounded-lg cursor-pointer transition-colors"
-                  onClick={() => navigate(`/host/food/${exp.id}`)}
-                >
-                  <div className="flex-1">
-                    <h3 className="font-medium">{exp.title}</h3>
-                    <div className="flex items-center gap-4 text-sm text-gray-600">
-                      <span>${exp.price_per_person} per person</span>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(exp.status)}`}>
-                        {exp.status}
-                      </span>
+              {foodExperiences.length > 0 ? (
+                foodExperiences.map((exp) => (
+                  <div 
+                    key={exp.id}
+                    className="py-4 flex flex-wrap md:flex-nowrap items-center justify-between hover:bg-gray-50 rounded-lg transition-colors"
+                  >
+                    <div className="flex-1 mb-2 md:mb-0" onClick={() => navigate(`/host/food/edit/${exp.id}`)}>
+                      <h3 className="font-medium cursor-pointer">{exp.title}</h3>
+                      <div className="flex items-center gap-4 text-sm text-gray-600">
+                        <span>${exp.price_per_person} per person</span>
+                        <Badge className={getStatusColor(exp.status)}>
+                          {exp.status.charAt(0).toUpperCase() + exp.status.slice(1)}
+                        </Badge>
+                        {exp.created_at && (
+                          <span>Created: {formatDate(exp.created_at)}</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex gap-2 w-full md:w-auto">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => navigate(`/food/${exp.id}`)}
+                      >
+                        Preview
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => navigate(`/host/food/edit/${exp.id}`)}
+                      >
+                        Edit
+                      </Button>
+                      
+                      {exp.status === 'draft' && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => handleStatusChange(exp.id, 'published')}
+                          className="text-green-600"
+                        >
+                          <RefreshCw className="h-4 w-4 mr-1" />
+                          Publish
+                        </Button>
+                      )}
+
+                      {exp.status === 'published' && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => handleStatusChange(exp.id, 'archived')}
+                          className="text-gray-600"
+                        >
+                          <RefreshCw className="h-4 w-4 mr-1" />
+                          Archive
+                        </Button>
+                      )}
+
+                      {exp.status === 'archived' && (
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          onClick={() => handleStatusChange(exp.id, 'published')}
+                          className="text-green-600"
+                        >
+                          <RefreshCw className="h-4 w-4 mr-1" />
+                          Republish
+                        </Button>
+                      )}
+
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => handleDelete(exp.id)}
+                        className="text-red-600"
+                      >
+                        Delete
+                      </Button>
                     </div>
                   </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400" />
+                ))
+              ) : (
+                <div className="py-8 text-center">
+                  <Utensils className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-lg font-medium text-gray-900 mb-1">No food experiences yet</p>
+                  <p className="text-gray-500 mb-4">Create your first food experience to get started</p>
+                  <Button onClick={() => navigate('/host/food/new')}>
+                    Create Food Experience
+                  </Button>
                 </div>
-              ))}
-              {foodExperiences.length === 0 && (
-                <p className="py-4 text-center text-gray-500">
-                  No food experiences yet. Create your first one!
-                </p>
               )}
             </div>
           </CardContent>
@@ -243,7 +351,7 @@ const HostDashboard = () => {
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => navigate('/host/stay')}
+                onClick={() => navigate('/host/stay/new')}
                 className="flex items-center gap-2"
               >
                 Add New <Plus className="w-4 h-4" />
@@ -251,30 +359,10 @@ const HostDashboard = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="divide-y">
-              {stays.map((stay) => (
-                <div 
-                  key={stay.id}
-                  className="py-4 flex items-center justify-between hover:bg-gray-50 rounded-lg cursor-pointer transition-colors"
-                  onClick={() => navigate(`/host/stay/${stay.id}`)}
-                >
-                  <div className="flex-1">
-                    <h3 className="font-medium">{stay.title}</h3>
-                    <div className="flex items-center gap-4 text-sm text-gray-600">
-                      <span>${stay.price_per_night} per night</span>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(stay.status)}`}>
-                        {stay.status}
-                      </span>
-                    </div>
-                  </div>
-                  <ArrowRight className="w-5 h-5 text-gray-400" />
-                </div>
-              ))}
-              {stays.length === 0 && (
-                <p className="py-4 text-center text-gray-500">
-                  No stays yet. Create your first one!
-                </p>
-              )}
+            <div className="py-8 text-center">
+              <Hotel className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-lg font-medium text-gray-900 mb-1">Stay listings coming soon</p>
+              <p className="text-gray-500 mb-4">This feature is under development</p>
             </div>
           </CardContent>
         </Card>

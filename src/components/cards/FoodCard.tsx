@@ -11,7 +11,7 @@ interface ImageData {
 }
 
 interface FoodExperience {
-  id: number;
+  id: string | number;
   title: string;
   description: string;
   images: ImageData[];

@@ -34,41 +34,11 @@ import {
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useLoadScript, GoogleMap, MarkerF } from '@react-google-maps/api';
 import ReviewsSection from "@/components/reviews/ReviewsSection";
-import { supabase } from "@/integrations/supabase/client";
 
-interface FoodExperience {
-  id: number;
-  title: string;
-  description: string;
-  images: { url: string; order: number }[];
-  price_per_person: number;
-  cuisine_type: string;
-  menu_description: string;
-  host: {
-    name: string;
-    image: string;
-    rating: number;
-    reviews: number;
-  };
-  details: {
-    duration: string;
-    groupSize: string;
-    includes: string[];
-    language: string;
-    location: string;
-  };
-}
-
-interface Review {
-  id: number;
-  user: {
-    name: string;
-    image?: string;
-  };
-  rating: number;
-  comment: string;
-  date: string;
-}
+// Import our services
+import { getFoodExperienceById, isFoodExperienceFavorited, toggleFoodExperienceFavorite } from "@/services/foodExperienceService";
+import { getAverageRating, getReviewCount } from "@/services/reviewService";
+import type { FoodExperience } from "@/types/food";
 
 const FoodDetails = () => {
   const { id } = useParams();
@@ -82,63 +52,47 @@ const FoodDetails = () => {
   const [reviewCount, setReviewCount] = useState(0);
   
   const { isLoaded } = useLoadScript({
-    googleMapsApiKey: 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE',
-    libraries: ['places']
-  });
-
-  const mockReviews: Review[] = [
-    {
-      id: 1,
-      user: { name: "Sarah Johnson", image: "https://i.pravatar.cc/150?img=1" },
-      rating: 5,
-      comment: "Amazing food! The flavors were authentic and the host was very welcoming. I learned so much about African cuisine.",
-      date: "2023-10-15"
-    },
-    {
-      id: 2,
-      user: { name: "Michael Chen" },
-      rating: 4,
-      comment: "Great food and atmosphere. The host shared interesting stories about the cultural significance of each dish.",
-      date: "2023-09-22"
-    },
-    {
-      id: 3,
-      user: { name: "Emma Wilson", image: "https://i.pravatar.cc/150?img=5" },
-      rating: 5,
-      comment: "One of the best authentic meals I've had. The host's home was welcoming and the food was incredible!",
-      date: "2023-08-30"
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
+    libraries: ['places'],
+    onError: () => {
+      console.warn('Google Maps API failed to load. Using fallback location display.');
     }
-  ];
-
-  const locationCoords = {
-    lat: 40.7128,
-    lng: -74.0060
-  };
+  });
 
   const getFullImageUrl = (url: string) => {
     if (!url) return '/default-food.jpg';
     if (url.startsWith('http')) return url;
-    return `${import.meta.env.VITE_API_URL}/${url}`;
+    // If image is stored in Supabase Storage
+    if (url.startsWith('food-experience-images/')) {
+      return `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/${url}`;
+    }
+    return url;
   };
 
   useEffect(() => {
     const fetchExperience = async () => {
+      if (!id) return;
+      
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/food-experiences/${id}`);
-        if (!response.ok) throw new Error('Failed to fetch experience');
-        const data = await response.json();
-        const processedData = {
-          ...data,
-          images: data.images.map((img: { url: string; order?: number }, index: number) => ({
-            url: getFullImageUrl(img.url),
-            order: img.order ?? index
-          })),
-          host: {
-            ...data.host,
-            image: getFullImageUrl(data.host.image)
-          }
-        };
-        setExperience(processedData);
+        setLoading(true);
+        const data = await getFoodExperienceById(id);
+        
+        if (data) {
+          // Process the images URLs
+          const processedData = {
+            ...data,
+            images: data.images.map(img => ({
+              ...img,
+              url: getFullImageUrl(img.url)
+            }))
+          };
+          
+          setExperience(processedData);
+          
+          // Check if the experience is favorited
+          const favorited = await isFoodExperienceFavorited(id);
+          setIsFavorite(favorited);
+        }
       } catch (error) {
         console.error('Error:', error);
       } finally {
@@ -150,38 +104,11 @@ const FoodDetails = () => {
       if (!id) return;
       
       try {
-        const { count, error: countError } = await supabase
-          .from('reviews')
-          .select('id', { count: 'exact', head: false })
-          .eq('listing_id', id.toString())
-          .eq('listing_type', 'food');
-          
-        if (countError) throw countError;
+        const avgRating = await getAverageRating(id, 'food_experience');
+        const numReviews = await getReviewCount(id, 'food_experience');
         
-        const { data: ratingData, error: ratingError } = await supabase
-          .rpc('get_average_rating', { 
-            p_listing_id: id.toString(), 
-            p_listing_type: 'food' 
-          });
-          
-        if (ratingError) {
-          const { data, error } = await supabase
-            .from('reviews')
-            .select('rating')
-            .eq('listing_id', id.toString())
-            .eq('listing_type', 'food');
-            
-          if (error) throw error;
-          
-          if (data && data.length > 0) {
-            const sum = data.reduce((acc, review) => acc + review.rating, 0);
-            setAverageRating(sum / data.length);
-          }
-        } else {
-          setAverageRating(ratingData || 0);
-        }
-        
-        setReviewCount(count || 0);
+        setAverageRating(avgRating);
+        setReviewCount(numReviews);
       } catch (error) {
         console.error('Error fetching review stats:', error);
       }
@@ -191,8 +118,15 @@ const FoodDetails = () => {
     fetchReviewStats();
   }, [id]);
 
-  const toggleFavorite = () => {
-    setIsFavorite(!isFavorite);
+  const toggleFavorite = async () => {
+    if (!id) return;
+    
+    try {
+      const newFavoriteStatus = await toggleFoodExperienceFavorite(id);
+      setIsFavorite(newFavoriteStatus);
+    } catch (error) {
+      console.error('Error toggling favorite status:', error);
+    }
   };
 
   const openImageDialog = (index: number) => {
@@ -235,8 +169,8 @@ const FoodDetails = () => {
               <div className="flex flex-wrap items-center gap-4 text-muted-foreground">
                 <div className="flex items-center gap-1">
                   <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                  <span className="font-medium">{experience.host.rating}</span>
-                  <span>({experience.host.reviews} reviews)</span>
+                  <span className="font-medium">{averageRating.toFixed(1)}</span>
+                  <span>({reviewCount} reviews)</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <MapPin className="w-4 h-4" />
@@ -434,7 +368,7 @@ const FoodDetails = () => {
               <TabsContent value="reviews" className="space-y-8">
                 <ReviewsSection 
                   listingId={id || ''} 
-                  listingType="food"
+                  listingType="food_experience"
                   averageRating={averageRating}
                   reviewCount={reviewCount}
                 />
@@ -458,10 +392,10 @@ const FoodDetails = () => {
                       <div className="w-full h-full bg-gray-100 flex items-center justify-center">
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
                       </div>
-                    ) : (
+                    ) : experience.coordinates ? (
                       <GoogleMap
                         zoom={14}
-                        center={locationCoords}
+                        center={experience.coordinates}
                         mapContainerClassName="w-full h-full"
                         options={{
                           styles: [
@@ -474,25 +408,31 @@ const FoodDetails = () => {
                         }}
                       >
                         <MarkerF
-                          position={locationCoords}
+                          position={experience.coordinates}
                           icon={{
                             url: '/images/food-marker.svg',
                             scaledSize: new google.maps.Size(40, 40)
                           }}
                         />
                       </GoogleMap>
+                    ) : (
+                      <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+                        <p className="text-muted-foreground">Location coordinates not available</p>
+                      </div>
                     )}
                   </div>
                   
-                  <div className="flex justify-center mb-4">
-                    <Button 
-                      variant="outline" 
-                      onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${locationCoords.lat},${locationCoords.lng}`, '_blank')}
-                    >
-                      <Navigation className="w-4 h-4 mr-2" />
-                      Get Directions
-                    </Button>
-                  </div>
+                  {experience.coordinates && (
+                    <div className="flex justify-center mb-4">
+                      <Button 
+                        variant="outline" 
+                        onClick={() => window.open(`https://www.google.com/maps/dir/?api=1&destination=${experience.coordinates?.lat},${experience.coordinates?.lng}`, '_blank')}
+                      >
+                        <Navigation className="w-4 h-4 mr-2" />
+                        Get Directions
+                      </Button>
+                    </div>
+                  )}
                   
                   <div className="space-y-2">
                     <h3 className="font-medium">Nearby landmarks:</h3>

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
 import { useNavigate } from 'react-router-dom';
+import { apiService } from '@/services/api';
 
 interface FeaturedItem {
   id: number;
@@ -166,28 +167,18 @@ export const FeaturedSection = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Fetch featured food, stays, and category counts
-        const [foodRes, staysRes, categoriesRes] = await Promise.all([
-          fetch(`${import.meta.env.VITE_API_URL}/featured-food`),
-          fetch(`${import.meta.env.VITE_API_URL}/featured-stays`),
-          fetch(`${import.meta.env.VITE_API_URL}/food-categories`)
-        ]);
-
-        if (!foodRes.ok || !staysRes.ok) {
-          throw new Error('Failed to fetch data');
-        }
-
+        // Use the new API service with Supabase and fallback mock data
         const [foodData, staysData, categoriesData] = await Promise.all([
-          foodRes.json(),
-          staysRes.json(),
-          categoriesRes.ok ? categoriesRes.json() : []
+          apiService.getFeaturedFood(),
+          apiService.getFeaturedStays(),
+          apiService.getFoodCategories()
         ]);
 
+        setFeaturedFood(foodData);
+        setFeaturedStays(staysData);
+        
         console.log('API Response - Categories Data:', categoriesData);
 
-        setFeaturedFood(Array.isArray(foodData) ? foodData : []);
-        setFeaturedStays(Array.isArray(staysData) ? staysData : []);
-        
         // Update categories with real counts from API
         if (Array.isArray(categoriesData) && categoriesData.length > 0) {
           // Create a map of cuisine type to count with different possible formats
