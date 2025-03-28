@@ -6,8 +6,7 @@ import { Separator } from "@/components/ui/separator";
 import { format } from "date-fns";
 
 interface ReviewUser {
-  display_name?: string;
-  email?: string;
+  name?: string;
 }
 
 interface Review {
@@ -55,15 +54,14 @@ const ReviewsList = ({ listingId, listingType, refreshTrigger = 0 }: ReviewsList
             data.map(async (review) => {
               const { data: userData } = await supabase
                 .from('profiles')
-                .select('email, display_name')
+                .select('name')
                 .eq('id', review.author_id)
                 .single();
               
               return {
                 ...review,
                 user: userData || { 
-                  display_name: 'Anonymous',
-                  email: undefined 
+                  name: 'Anonymous'
                 }
               };
             })
@@ -109,7 +107,7 @@ const ReviewsList = ({ listingId, listingType, refreshTrigger = 0 }: ReviewsList
   return (
     <div className="space-y-6">
       {reviews.map((review) => {
-        const name = review.user?.display_name || review.author_id.substring(0, 8) || 'Anonymous';
+        const name = review.user?.name || review.author_id.substring(0, 8) || 'Anonymous';
         const initials = name.charAt(0).toUpperCase();
         
         return (

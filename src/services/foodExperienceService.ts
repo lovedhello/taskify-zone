@@ -165,8 +165,8 @@ export async function getFoodExperienceById(id: string) {
   const { data: reviewsData, error: reviewsError } = await supabase
     .from('reviews')
     .select('rating')
-    .eq('item_id', id)
-    .eq('item_type', 'food_experience');
+    .eq('target_id', id)
+    .eq('target_type', 'food_experience');
 
   if (reviewsError) {
     console.error('Error fetching reviews:', reviewsError);

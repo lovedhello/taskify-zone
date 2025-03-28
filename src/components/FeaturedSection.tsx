@@ -131,115 +131,112 @@ const Section = <T extends { id: number | string }>({
   );
 };
 
-// Initial cuisine categories with placeholder counts
-const initialCuisineCategories = [
-  {
-    id: 'African',
-    title: 'African Cuisine',
-    description: 'Explore rich flavors and traditional dishes from across Africa',
-    image: '/images/african.jpg',
-    count: 0
-  },
-  {
-    id: 'Italian',
-    title: 'Italian Cuisine',
-    description: 'Authentic pasta, pizza, and Mediterranean delights',
-    image: '/images/italian.jpg',
-    count: 0
-  },
-  {
-    id: 'Asian',
-    title: 'Asian Cuisine',
-    description: "From sushi to stir-fry, discover Asia's diverse flavors",
-    image: '/images/asian.jpg',
-    count: 0
-  }
-];
-
 export const FeaturedSection = () => {
   const navigate = useNavigate();
   const [featuredFood, setFeaturedFood] = useState<FeaturedItem[]>([]);
   const [featuredStays, setFeaturedStays] = useState<FeaturedItem[]>([]);
-  const [categories, setCategories] = useState<Category[]>(initialCuisineCategories);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [sectionLoadingStates, setSectionLoadingStates] = useState({
+    food: true,
+    categories: true,
+    stays: true
+  });
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Use the new API service with Supabase and fallback mock data
-        const [foodData, staysData, categoriesData] = await Promise.all([
-          apiService.getFeaturedFood(),
-          apiService.getFeaturedStays(),
-          apiService.getFoodCategories()
+        // Fetch data from API service with caching
+        const fetchFood = async () => {
+          try {
+            setSectionLoadingStates(prev => ({ ...prev, food: true }));
+            const foodData = await apiService.getFeaturedFood();
+            setFeaturedFood(foodData);
+          } catch (err) {
+            console.error('Error fetching food:', err);
+          } finally {
+            setSectionLoadingStates(prev => ({ ...prev, food: false }));
+          }
+        };
+
+        const fetchStays = async () => {
+          try {
+            setSectionLoadingStates(prev => ({ ...prev, stays: true }));
+            const staysData = await apiService.getFeaturedStays();
+            setFeaturedStays(staysData);
+          } catch (err) {
+            console.error('Error fetching stays:', err);
+          } finally {
+            setSectionLoadingStates(prev => ({ ...prev, stays: false }));
+          }
+        };
+
+        const fetchCategories = async () => {
+          try {
+            setSectionLoadingStates(prev => ({ ...prev, categories: true }));
+            const categoriesData = await apiService.getFoodCategories();
+            
+            if (Array.isArray(categoriesData) && categoriesData.length > 0) {
+              const categoryImages = {
+                'Italian': '/images/italian.jpg',
+                'Asian': '/images/asian.jpg', 
+                'African': '/images/african.jpg',
+                'Mexican': '/images/mexican.jpg',
+                'American': '/images/american.jpg',
+                'Mediterranean': '/images/mediterranean.jpg',
+                'European': '/images/european.jpg',
+                'Indian': '/images/indian.jpg',
+                'Middle Eastern': '/images/middle-eastern.jpg',
+                'Japanese': '/images/japanese.jpg',
+                'Thai': '/images/thai.jpg',
+                'Chinese': '/images/chinese.jpg',
+                'Korean': '/images/korean.jpg',
+                'Vietnamese': '/images/vietnamese.jpg',
+                'French': '/images/french.jpg',
+                'Spanish': '/images/spanish.jpg',
+                'Greek': '/images/greek.jpg',
+                'Caribbean': '/images/caribbean.jpg',
+                'Latin American': '/images/latin-american.jpg',
+                'Vegetarian': '/images/vegetarian.jpg',
+                'Vegan': '/images/vegan.jpg',
+                'Gluten-Free': '/images/gluten-free.jpg',
+                'default': '/images/default-cuisine.jpg'
+              };
+              
+              const formattedCategories = categoriesData.map(item => {
+                const categoryId = item.cuisine_type;
+                const imageKey = categoryId in categoryImages ? categoryId : 'default';
+                
+                return {
+                  id: categoryId,
+                  title: `${categoryId} Cuisine`,
+                  description: `Explore delicious ${categoryId} dishes and cooking experiences`,
+                  image: categoryImages[imageKey as keyof typeof categoryImages],
+                  count: item.count
+                };
+              });
+              
+              setCategories(formattedCategories);
+            }
+          } catch (err) {
+            console.error('Error fetching categories:', err);
+          } finally {
+            setSectionLoadingStates(prev => ({ ...prev, categories: false }));
+          }
+        };
+
+        // Fetch all data in parallel
+        await Promise.all([
+          fetchFood(),
+          fetchStays(),
+          fetchCategories()
         ]);
 
-        setFeaturedFood(foodData);
-        setFeaturedStays(staysData);
-        
-        console.log('API Response - Categories Data:', categoriesData);
-
-        // Update categories with real counts from API
-        if (Array.isArray(categoriesData) && categoriesData.length > 0) {
-          // Create a map of cuisine type to count with different possible formats
-          const countMap = new Map<string, number>();
-          
-          categoriesData.forEach((item: CategoryCount) => {
-            const cuisineType = item.cuisine_type;
-            console.log('Mapping cuisine:', cuisineType, 'Count:', item.count);
-            
-            // Store multiple variations of the cuisine name to handle different formats
-            countMap.set(cuisineType, item.count);
-            
-            // Also store without "Cuisine" suffix if it exists
-            if (cuisineType.includes('Cuisine')) {
-              const simpleName = cuisineType.replace(' Cuisine', '');
-              countMap.set(simpleName, item.count);
-            }
-            
-            // Also store with "Cuisine" suffix if it doesn't exist
-            if (!cuisineType.includes('Cuisine')) {
-              countMap.set(`${cuisineType} Cuisine`, item.count);
-            }
-          });
-          
-          console.log('Count Map:', Object.fromEntries(countMap));
-          
-          // Update our categories with the real counts
-          const updatedCategories = initialCuisineCategories.map(category => {
-            // Try multiple ways to match the category
-            let count = countMap.get(category.id) || 0;
-            
-            // If count is still 0, try with the title
-            if (count === 0) {
-              count = countMap.get(category.title) || 0;
-            }
-            
-            // If count is still 0, try with a lowercase match
-            if (count === 0) {
-              const lowercaseId = category.id.toLowerCase();
-              for (const [key, value] of countMap.entries()) {
-                if (key.toLowerCase() === lowercaseId || 
-                    key.toLowerCase().includes(lowercaseId)) {
-                  count = value;
-                  break;
-                }
-              }
-            }
-            
-            console.log('Category ID:', category.id, 'Title:', category.title, 'Matched Count:', count);
-            return { ...category, count };
-          });
-          
-          console.log('Updated Categories:', updatedCategories);
-          setCategories(updatedCategories);
-        } else {
-          console.log('No categories data or empty array received from API');
-        }
+        setLoading(false);
       } catch (error) {
         console.error('Error fetching featured data:', error);
         setError('Failed to load featured content');
-      } finally {
         setLoading(false);
       }
     };
@@ -247,15 +244,55 @@ export const FeaturedSection = () => {
     fetchData();
   }, []);
 
-  if (loading) {
+  // Check if all sections are done loading
+  useEffect(() => {
+    if (!sectionLoadingStates.food && 
+        !sectionLoadingStates.stays && 
+        !sectionLoadingStates.categories) {
+      setLoading(false);
+    }
+  }, [sectionLoadingStates]);
+  
+  const LoadingPlaceholder = () => (
+    <div className="py-6 px-4 rounded-xl bg-gray-100 animate-pulse flex items-center justify-center h-[250px]">
+      <div className="h-8 w-8 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+    </div>
+  );
+
+  if (loading && !featuredFood.length && !featuredStays.length && !categories.length) {
     return (
-      <div className="flex justify-center items-center min-h-[200px]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
+      <div className="space-y-16 container mx-auto px-4 py-12">
+        <div>
+          <h2 className="text-4xl font-bold tracking-tight text-gray-900 font-display mb-8">
+            Popular Food Experiences
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[1, 2, 3].map(i => <LoadingPlaceholder key={i} />)}
+          </div>
+        </div>
+        
+        <div>
+          <h2 className="text-4xl font-bold tracking-tight text-gray-900 font-display mb-8">
+            Browse by Category
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[1, 2, 3].map(i => <LoadingPlaceholder key={i} />)}
+          </div>
+        </div>
+        
+        <div>
+          <h2 className="text-4xl font-bold tracking-tight text-gray-900 font-display mb-8">
+            Featured Stays
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[1, 2, 3].map(i => <LoadingPlaceholder key={i} />)}
+          </div>
+        </div>
       </div>
     );
   }
 
-  if (error) {
+  if (error && !featuredFood.length && !featuredStays.length && !categories.length) {
     return (
       <div className="text-center py-8 text-muted-foreground">
         {error}
@@ -279,19 +316,32 @@ export const FeaturedSection = () => {
           />
         )}
       />
-
-      <Section
-        title="Browse by Category"
-        items={categories}
-        renderItem={(category) => (
-          <ItemCard
-            key={category.id}
-            item={category}
-            onClick={() => navigate(`/food?cuisine_types=${encodeURIComponent(category.id)}`)}
-            showCount
-          />
-        )}
-      />
+      
+      {sectionLoadingStates.categories && !categories.length ? (
+        <div className="py-12">
+          <div className="container mx-auto px-4">
+            <h2 className="text-4xl font-bold tracking-tight text-gray-900 font-display mb-8">
+              Browse by Category
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {[1, 2, 3].map(i => <LoadingPlaceholder key={i} />)}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <Section
+          title="Browse by Category"
+          items={categories}
+          renderItem={(category) => (
+            <ItemCard
+              key={category.id}
+              item={category}
+              onClick={() => navigate(`/food?cuisine_types=${encodeURIComponent(category.id)}`)}
+              showCount
+            />
+          )}
+        />
+      )}
 
       <Section
         title="Featured Stays"
