@@ -45,6 +45,8 @@ export const ImageGallery = ({
             src={images[currentIndex].url}
             alt={`Image ${currentIndex + 1}`}
             className="w-full h-full object-cover"
+            loading="lazy"
+            style={{ objectPosition: 'center' }}
           />
           
           {images.length > 1 && (

@@ -226,6 +226,8 @@ const FoodDetails = () => {
                     alt={`${experience.title} - Main Image`}
                     className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
                     onClick={() => openImageDialog(0)}
+                    loading="lazy"
+                    style={{ objectPosition: 'center' }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300 flex items-end justify-start p-4">
                     <Button variant="secondary" size="sm" onClick={() => openImageDialog(0)}>
@@ -243,6 +245,8 @@ const FoodDetails = () => {
                         alt={`${experience.title} - Image ${index + 2}`}
                         className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
                         onClick={() => openImageDialog(index + 1)}
+                        loading="lazy"
+                        style={{ objectPosition: 'center' }}
                       />
                       {index === 1 && experience.images.length > 3 && (
                         <div 

@@ -75,6 +75,8 @@ const DetailView = ({
             src={images[currentImageIndex]}
             alt={`${title} - Image ${currentImageIndex + 1}`}
             className="w-full h-full object-cover"
+            loading="lazy"
+            style={{ objectPosition: 'center' }}
           />
           <div className="absolute inset-0 bg-black bg-opacity-20 opacity-0 group-hover:opacity-100 transition-opacity">
             <Button

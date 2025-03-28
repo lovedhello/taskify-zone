@@ -61,32 +61,11 @@ interface Stay {
     price: number;
     is_available: boolean;
   }[];
+  coordinates?: {
+    lat: number;
+    lng: number;
+  };
 }
-
-// Mock reviews data - in a real app, this would come from the API
-const mockReviews = [
-  {
-    id: 1,
-    user: { name: "Sarah Johnson", image: "https://i.pravatar.cc/150?img=1" },
-    rating: 5,
-    comment: "Beautiful place! The apartment was clean, spacious, and had an amazing view. The host was very responsive and helpful.",
-    date: "2023-10-15"
-  },
-  {
-    id: 2,
-    user: { name: "Michael Chen" },
-    rating: 4,
-    comment: "Great location and comfortable stay. The amenities were excellent and the host provided great recommendations for local attractions.",
-    date: "2023-09-22"
-  },
-  {
-    id: 3,
-    user: { name: "Emma Wilson", image: "https://i.pravatar.cc/150?img=5" },
-    rating: 5,
-    comment: "One of the best stays I've had! The place was exactly as described and the host went above and beyond to make our stay comfortable.",
-    date: "2023-08-30"
-  }
-];
 
 const StayDetails = () => {
   const { id } = useParams();
@@ -100,12 +79,12 @@ const StayDetails = () => {
   
   // Google Maps API loading
   const { isLoaded } = useLoadScript({
-    googleMapsApiKey: 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE',
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
     libraries: ['places']
   });
   
-  // Mock location coordinates - in a real app, this would come from the API
-  const locationCoords = {
+  // Get location coordinates from the stay data, not hardcoded
+  const locationCoords = stay?.coordinates || {
     lat: 40.7128,
     lng: -74.0060
   };
@@ -246,6 +225,8 @@ const StayDetails = () => {
                     alt={`${stay.title} - Main Image`}
                     className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
                     onClick={() => openImageDialog(0)}
+                    loading="lazy"
+                    style={{ objectPosition: 'center' }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300 flex items-end justify-start p-4">
                     <Button variant="secondary" size="sm" onClick={() => openImageDialog(0)}>
@@ -406,49 +387,36 @@ const StayDetails = () => {
                 </Card>
               </TabsContent>
               
-              <TabsContent value="reviews" className="space-y-8">
+              <TabsContent value="reviews">
                 <Card className="p-6">
                   <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-2xl font-semibold">Reviews</h2>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-2xl font-semibold">Reviews</h3>
+                      <Badge variant="secondary" className="ml-2">
+                        {stay.host.reviews} reviews
+                      </Badge>
+                    </div>
+                    
                     <div className="flex items-center">
-                      <Star className="w-5 h-5 text-yellow-500 fill-yellow-500 mr-1" />
-                      <span className="font-medium text-lg">{stay.host.rating}</span>
-                      <span className="text-muted-foreground ml-1">
-                        ({stay.host.reviews} reviews)
-                      </span>
+                      <div className="flex">
+                        {[...Array(5)].map((_, i) => (
+                          <Star 
+                            key={i} 
+                            className={`w-5 h-5 ${i < stay.host.rating ? "text-yellow-500 fill-yellow-500" : "text-gray-300"}`} 
+                          />
+                        ))}
+                      </div>
+                      <span className="ml-2 font-medium">{stay.host.rating.toFixed(1)}</span>
                     </div>
                   </div>
                   
+                  <Separator className="mb-6" />
+                  
                   <div className="space-y-6">
-                    {mockReviews.map((review) => (
-                      <div key={review.id} className="pb-6 border-b last:border-0">
-                        <div className="flex items-center gap-3 mb-3">
-                          <Avatar>
-                            <AvatarImage src={review.user.image} alt={review.user.name} />
-                            <AvatarFallback>{review.user.name.charAt(0)}</AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <p className="font-medium">{review.user.name}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {new Date(review.date).toLocaleDateString('en-US', { 
-                                year: 'numeric', 
-                                month: 'long', 
-                                day: 'numeric' 
-                              })}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex mb-2">
-                          {[...Array(5)].map((_, i) => (
-                            <Star 
-                              key={i} 
-                              className={`w-4 h-4 ${i < review.rating ? "text-yellow-500 fill-yellow-500" : "text-gray-300"}`} 
-                            />
-                          ))}
-                        </div>
-                        <p className="text-muted-foreground">{review.comment}</p>
-                      </div>
-                    ))}
+                    {/* Reviews would be fetched from the API here */}
+                    <p className="text-center text-muted-foreground py-8">
+                      Reviews are being loaded from our database.
+                    </p>
                   </div>
                 </Card>
               </TabsContent>

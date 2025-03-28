@@ -27,9 +27,10 @@ const ImageUpload = ({
 
   const compressImage = async (file: File) => {
     const options = {
-      maxSizeMB: 1,
-      maxWidthOrHeight: 1920,
-      useWebWorker: true
+      maxSizeMB: 2,
+      maxWidthOrHeight: 2560,
+      useWebWorker: true,
+      initialQuality: 0.9
     };
     
     try {
@@ -209,7 +210,9 @@ const ImageUpload = ({
                       <img
                         src={getDisplayUrl(url)}
                         alt={`Upload ${index + 1}`}
-                        className="h-20 w-20 object-cover"
+                        className="h-32 w-32 object-cover"
+                        loading="lazy"
+                        style={{ objectPosition: 'center' }}
                       />
                       <Button
                         type="button"

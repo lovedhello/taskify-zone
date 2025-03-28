@@ -8,6 +8,7 @@ export interface FoodExperience {
   menu_description: string;
   location_name: string;
   amenities?: string[];
+  zipcode?: string;
   host: {
     name: string;
     image: string;

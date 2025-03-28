@@ -161,9 +161,22 @@ export async function getFoodExperienceById(id: string) {
   // Extract amenities
   const amenities = data.amenities.map((item: any) => item.amenity.name);
 
-  // Calculate a mock rating for now (until we implement the real ratings)
-  const mockRating = (Math.floor(Math.random() * 10) + 35) / 10; // Random between 3.5 and 5.0
-  const mockReviews = Math.floor(Math.random() * 50) + 5; // Random between 5 and 55
+  // Get real ratings from reviews table
+  const { data: reviewsData, error: reviewsError } = await supabase
+    .from('reviews')
+    .select('rating')
+    .eq('item_id', id)
+    .eq('item_type', 'food_experience');
+
+  if (reviewsError) {
+    console.error('Error fetching reviews:', reviewsError);
+  }
+
+  // Calculate average rating from real reviews or default to 5.0
+  const reviews = reviewsData || [];
+  const totalRating = reviews.reduce((sum: number, review: any) => sum + (review.rating || 0), 0);
+  const averageRating = reviews.length > 0 ? totalRating / reviews.length : 5.0;
+  const reviewCount = reviews.length;
 
   return {
     id: data.id,
@@ -178,8 +191,8 @@ export async function getFoodExperienceById(id: string) {
     host: {
       name: data.host?.name || 'Host',
       image: data.host?.avatar_url || '',
-      rating: mockRating,
-      reviews: mockReviews,
+      rating: parseFloat(averageRating.toFixed(1)),
+      reviews: reviewCount,
     },
     details: {
       duration: data.duration || '2 hours',
