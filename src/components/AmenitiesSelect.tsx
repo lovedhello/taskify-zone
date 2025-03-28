@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Amenity {
   id: string;
@@ -26,9 +27,14 @@ interface Amenity {
 interface AmenitiesSelectProps {
   selectedAmenities: Amenity[];
   onAmenitiesChange: (amenities: Amenity[]) => void;
+  type?: 'stay' | 'food' | string;
 }
 
-export const AmenitiesSelect = ({ selectedAmenities = [], onAmenitiesChange }: AmenitiesSelectProps) => {
+export const AmenitiesSelect = ({ 
+  selectedAmenities = [], 
+  onAmenitiesChange,
+  type = 'stay'
+}: AmenitiesSelectProps) => {
   const [open, setOpen] = useState(false);
   const [groupedAmenities, setGroupedAmenities] = useState<Record<string, Amenity[]>>({});
   const [newAmenityName, setNewAmenityName] = useState("");
@@ -37,14 +43,25 @@ export const AmenitiesSelect = ({ selectedAmenities = [], onAmenitiesChange }: A
   useEffect(() => {
     const fetchAmenities = async () => {
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/host/amenities?type=stay`);
-        if (!response.ok) throw new Error('Failed to fetch amenities');
-        const data = await response.json();
-        const validData = Object.entries(data || {}).reduce((acc, [key, value]) => {
-          acc[key] = Array.isArray(value) ? value : [];
+        // Fetch directly from Supabase
+        const { data, error } = await supabase
+          .from('amenities')
+          .select('*')
+          .eq('type', type);
+          
+        if (error) throw error;
+        
+        // Group amenities by category
+        const amenitiesByCategory = data.reduce((acc, amenity) => {
+          const category = amenity.category || 'Other';
+          if (!acc[category]) {
+            acc[category] = [];
+          }
+          acc[category].push(amenity);
           return acc;
         }, {} as Record<string, Amenity[]>);
-        setGroupedAmenities(validData);
+        
+        setGroupedAmenities(amenitiesByCategory);
       } catch (error) {
         console.error('Error fetching amenities:', error);
         setGroupedAmenities({});
@@ -52,7 +69,7 @@ export const AmenitiesSelect = ({ selectedAmenities = [], onAmenitiesChange }: A
     };
 
     fetchAmenities();
-  }, []);
+  }, [type]);
 
   const handleSelect = (amenity: Amenity) => {
     const currentSelected = Array.isArray(selectedAmenities) ? selectedAmenities : [];

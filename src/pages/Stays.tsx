@@ -17,31 +17,8 @@ import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-
-interface Stay {
-  id: number;
-  title: string;
-  description: string;
-  image: string;
-  images: { url: string }[];
-  price_per_night: number;
-  host: {
-    name: string;
-    image: string;
-    rating: number;
-    reviews: number;
-  };
-  details: {
-    bedrooms: number;
-    beds: number;
-    bathrooms: number;
-    maxGuests: number;
-    amenities: string[];
-    location: string;
-    propertyType?: string;
-    availability?: string[];
-  };
-}
+import { stayService, type Stay } from "@/services/stayService";
+import { useAuth } from "@/contexts/AuthContext";
 
 // Property types with more relevant categories for individual hosts
 const propertyTypes = [
@@ -98,20 +75,22 @@ const Stays = () => {
   const [location, setLocation] = useState<string | null>(searchParams.get('location'));
   const [bedrooms, setBedrooms] = useState("any");
   const [guests, setGuests] = useState("any");
-  const [favorites, setFavorites] = useState<number[]>([]);
+  const [favorites, setFavorites] = useState<string[]>([]);
   const [availability, setAvailability] = useState("any");
   const [applyButtonAnimation, setApplyButtonAnimation] = useState(false);
   const [resetButtonAnimation, setResetButtonAnimation] = useState(false);
+  const { user } = useAuth();
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE',
     libraries: ['places']
   });
 
+  // Helper function to get full image URL
   const getFullImageUrl = (url: string) => {
     if (!url) return `/images/placeholder-stay.jpg`;
     if (url.startsWith('http')) return url;
-    return `${import.meta.env.VITE_BACKEND_URL}${url}`;
+    return `${import.meta.env.VITE_BACKEND_URL || ''}${url}`;
   };
 
   useEffect(() => {
@@ -120,70 +99,40 @@ const Stays = () => {
     setLocation(searchParams.get('location'));
   }, [searchParams]);
 
+  // Fetch user's favorites when user changes
+  useEffect(() => {
+    const fetchFavorites = async () => {
+      if (user?.id) {
+        try {
+          const userFavorites = await stayService.getFavorites(user.id);
+          setFavorites(userFavorites);
+        } catch (error) {
+          console.error('Failed to fetch favorites:', error);
+        }
+      }
+    };
+
+    fetchFavorites();
+  }, [user]);
+
   useEffect(() => {
     const fetchStays = async () => {
       try {
-        // Create query parameters
-        const queryParams = new URLSearchParams();
+        setLoading(true);
         
-        // Add sort parameter
-        queryParams.append('sort', sortBy);
+        // Fetch stays from the service with the appropriate filters
+        const staysData = await stayService.getStays({
+          search: searchQuery,
+          zipcode: zipcode || undefined,
+          location: location || undefined,
+          sort: sortBy,
+          propertyType: selectedTypes.length > 0 ? selectedTypes : undefined
+        });
         
-        // Add zipcode if present
-        if (zipcode) {
-          queryParams.append('zipcode', zipcode);
-          console.log('Filtering stays by zipcode:', zipcode);
-        }
-        
-        // Add other search parameters if needed
-        if (searchQuery) {
-          queryParams.append('search', searchQuery);
-        }
-        
-        const url = `${import.meta.env.VITE_API_URL}/stays?${queryParams.toString()}`;
-        console.log('Fetching stays with URL:', url);
-        
-        const response = await fetch(url);
-        if (!response.ok) throw new Error('Failed to fetch stays');
-        const data = await response.json();
-        
-        // Debug: Log the raw data received from the API
-        console.log('Raw data from API:', data);
-        console.log('Data length:', data.length);
-        
-        // Handle empty array case specifically
-        if (!data || data.length === 0) {
-          console.log('No stays returned from API');
-          setStays([]);
-          setLoading(false);
-          return;
-        }
-        
-        // Process the images URLs
-        const processedData = data.map((stay: Stay) => ({
-          ...stay,
-          image: stay.image || (stay.images?.[0]?.url ? getFullImageUrl(stay.images[0].url) : getFullImageUrl('')),
-          images: stay.images?.map((img: { url: string }) => ({
-            url: getFullImageUrl(img.url)
-          })) || [],
-          host: {
-            ...stay.host,
-            image: getFullImageUrl(stay.host.image || '/uploads/default-avatar.png')
-          },
-          details: {
-            ...stay.details,
-            // Add mock availability dates if not provided
-            availability: stay.details.availability || generateMockAvailability()
-          }
-        }));
-        
-        // Debug: Log the processed data
-        console.log('Processed data:', processedData);
-        
-        setStays(processedData);
+        console.log('Fetched stays count:', staysData.length);
+        setStays(staysData);
       } catch (error) {
         console.error('Error fetching stays:', error);
-        // Set empty array instead of leaving previous state to avoid "no stays found" when there's an error
         setStays([]);
       } finally {
         setLoading(false);
@@ -191,47 +140,15 @@ const Stays = () => {
     };
 
     fetchStays();
-  }, [searchParams, sortBy, zipcode, searchQuery]);
+  }, [searchParams, sortBy, zipcode, location, searchQuery, selectedTypes]);
 
-  // Generate mock availability dates for demo purposes
-  const generateMockAvailability = () => {
-    const dates = [];
-    const startDate = new Date();
-    for (let i = 0; i < 30; i++) {
-      if (Math.random() > 0.3) { // 70% chance of being available
-        const date = new Date(startDate);
-        date.setDate(date.getDate() + i);
-        dates.push(format(date, 'yyyy-MM-dd'));
-      }
-    }
-    return dates;
-  };
-
+  // Apply client-side filtering for things that the backend doesn't handle yet
   const filteredStays = stays.filter(stay => {
-    // Debug: Log the stay for inspection
-    // console.log('Filtering stay:', stay.id, stay.title);
-    
-    // Apply search filter if not already filtered by backend
-    if (searchQuery && !zipcode && !stay.title.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !stay.description.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !stay.details.location.toLowerCase().includes(searchQuery.toLowerCase())) {
-      // console.log('Filtered out by search query');
-      return false;
-    }
-
-    // Apply property type filter - only if types are actually selected
-    if (selectedTypes.length > 0 && !selectedTypes.includes(stay.details.propertyType || '')) {
-      // console.log('Filtered out by property type');
-      return false;
-    }
-
     // Apply bedroom filter - only if a specific option is selected
     if (bedrooms !== "any") {
       if (bedrooms === "4+" && stay.details.bedrooms < 4) {
-        // console.log('Filtered out by bedrooms (4+)');
         return false;
       } else if (bedrooms !== "4+" && stay.details.bedrooms !== parseInt(bedrooms)) {
-        // console.log('Filtered out by bedrooms (specific number)');
         return false;
       }
     }
@@ -239,19 +156,16 @@ const Stays = () => {
     // Apply guest filter - only if a specific option is selected
     if (guests !== "any") {
       if (guests === "5+" && stay.details.maxGuests < 5) {
-        // console.log('Filtered out by guests (5+)');
         return false;
       } else if (guests === "3-4" && (stay.details.maxGuests < 3 || stay.details.maxGuests > 4)) {
-        // console.log('Filtered out by guests (3-4)');
         return false;
       } else if (guests === "1-2" && (stay.details.maxGuests < 1 || stay.details.maxGuests > 2)) {
-        // console.log('Filtered out by guests (1-2)');
         return false;
       }
     }
 
     // Apply availability filter based on selected option
-    if (availability !== "any" && stay.details.availability) {
+    if (availability !== "any" && stay.availability) {
       const today = new Date();
       const weekend = new Date(today);
       weekend.setDate(today.getDate() + (6 - today.getDay()));
@@ -280,7 +194,7 @@ const Stays = () => {
           const checkDate = new Date(today);
           while (checkDate <= nextMonth) {
             const formattedDate = format(checkDate, 'yyyy-MM-dd');
-            if (stay.details.availability?.includes(formattedDate)) {
+            if (stay.availability?.find(a => a.date === formattedDate && a.is_available)) {
               availableDaysCount++;
               if (availableDaysCount >= 5) break;
             }
@@ -297,7 +211,7 @@ const Stays = () => {
         
         while (checkDate <= availabilityEndDate) {
           const formattedDate = format(checkDate, 'yyyy-MM-dd');
-          if (stay.details.availability?.includes(formattedDate)) {
+          if (stay.availability?.find(a => a.date === formattedDate && a.is_available)) {
             hasAvailability = true;
             break;
           }
@@ -309,14 +223,16 @@ const Stays = () => {
     }
 
     // Apply date range filter ONLY if applyDateFilter is true
-    if (applyDateFilter && dateRange.from && dateRange.to && stay.details.availability) {
+    if (applyDateFilter && dateRange.from && dateRange.to && stay.availability) {
       // Check if all dates in the range are available
       let allDatesAvailable = true;
       const currentDate = new Date(dateRange.from);
       
       while (currentDate <= dateRange.to) {
         const formattedDate = format(currentDate, 'yyyy-MM-dd');
-        if (!stay.details.availability?.includes(formattedDate)) {
+        const availableDay = stay.availability?.find(a => a.date === formattedDate);
+        
+        if (!availableDay || !availableDay.is_available) {
           allDatesAvailable = false;
           break;
         }
@@ -324,7 +240,6 @@ const Stays = () => {
       }
       
       if (!allDatesAvailable) {
-        // console.log('Filtered out by date range');
         return false;
       }
     }
@@ -333,29 +248,36 @@ const Stays = () => {
   });
 
   // Debug: Log the filtered stays count
-  console.log('Filtered stays count:', filteredStays.length);
+  console.log('Filtered stays count after client filtering:', filteredStays.length);
 
-  // Apply client-side sorting as a fallback
-  const sortedStays = [...filteredStays].sort((a, b) => {
-    switch (sortBy) {
-      case 'price_asc':
-        return a.price_per_night - b.price_per_night;
-      case 'price_desc':
-        return b.price_per_night - a.price_per_night;
-      case 'rating_desc':
-        return b.host.rating - a.host.rating;
-      default:
-        return 0;
-    }
-  });
-
-  const toggleFavorite = (e: React.MouseEvent, stayId: number) => {
+  const toggleFavorite = async (e: React.MouseEvent, stayId: string) => {
     e.stopPropagation();
-    setFavorites(prev => 
-      prev.includes(stayId) 
-        ? prev.filter(id => id !== stayId)
-        : [...prev, stayId]
-    );
+    
+    if (user?.id) {
+      try {
+        // Call the service to toggle in database
+        const success = await stayService.toggleFavorite(stayId, user.id);
+        
+        if (success) {
+          // Update local state
+          setFavorites(prev => 
+            prev.includes(stayId) 
+              ? prev.filter(id => id !== stayId)
+              : [...prev, stayId]
+          );
+        }
+      } catch (error) {
+        console.error('Failed to toggle favorite:', error);
+      }
+    } else {
+      // If no user is logged in, just toggle in the UI 
+      // (this would typically prompt a login)
+      setFavorites(prev => 
+        prev.includes(stayId) 
+          ? prev.filter(id => id !== stayId)
+          : [...prev, stayId]
+      );
+    }
   };
 
   const handleTypeChange = (typeId: string) => {
@@ -630,7 +552,7 @@ const Stays = () => {
                   ]
                 }}
               >
-                {sortedStays.map((stay) => (
+                {filteredStays.map((stay) => (
                   <MarkerF
                     key={stay.id}
                     position={{ lat: 33.749 + Math.random() * 0.05, lng: -84.388 + Math.random() * 0.05 }}
@@ -649,9 +571,9 @@ const Stays = () => {
                 <div className="flex justify-center items-center h-64">
                   <LoadingSpinner className="h-8 w-8" />
                 </div>
-              ) : sortedStays.length > 0 ? (
+              ) : filteredStays.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {sortedStays.map((stay) => (
+                  {filteredStays.map((stay) => (
                     <Card 
                       key={stay.id}
                       className="group overflow-hidden hover:shadow-lg transition-all duration-300"

@@ -9,6 +9,7 @@ interface AuthUser {
   picture?: string;
   image?: string;
   sub?: string;
+  id?: string;
   is_host?: boolean;
   provider: 'google' | 'email';
 }
@@ -55,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Extract user data from Supabase User object
   const extractUserData = (supabaseUser: User): AuthUser => {
     return {
+      id: supabaseUser.id,
       email: supabaseUser.email || '',
       name: supabaseUser.user_metadata.name || supabaseUser.user_metadata.full_name || '',
       picture: supabaseUser.user_metadata.picture || supabaseUser.user_metadata.avatar_url,

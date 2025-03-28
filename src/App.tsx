@@ -128,6 +128,14 @@ const App = () => {
             }
           />
           <Route
+            path="/host/stay/new"
+            element={
+              <ProtectedRoute>
+                <HostStay />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/profile"
             element={
               <ProtectedRoute>

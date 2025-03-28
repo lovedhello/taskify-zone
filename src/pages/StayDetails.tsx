@@ -35,40 +35,11 @@ import {
 } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useLoadScript, GoogleMap, MarkerF } from '@react-google-maps/api';
-
-interface Stay {
-  id: number;
-  title: string;
-  description: string;
-  images: { url: string; order: number }[];
-  price_per_night: number;
-  host: {
-    name: string;
-    image: string;
-    rating: number;
-    reviews: number;
-  };
-  details: {
-    bedrooms: number;
-    beds: number;
-    bathrooms: number;
-    maxGuests: number;
-    amenities: string[];
-    location: string;
-  };
-  availability: {
-    date: string;
-    price: number;
-    is_available: boolean;
-  }[];
-  coordinates?: {
-    lat: number;
-    lng: number;
-  };
-}
+import { stayService, type Stay } from "@/services/stayService";
+import { useAuth } from "@/contexts/AuthContext";
 
 const StayDetails = () => {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const [stay, setStay] = useState<Stay | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
@@ -76,6 +47,7 @@ const StayDetails = () => {
   const [isImageDialogOpen, setIsImageDialogOpen] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const imageContainerRef = useRef<HTMLDivElement>(null);
+  const { user } = useAuth();
   
   // Google Maps API loading
   const { isLoaded } = useLoadScript({
@@ -83,39 +55,33 @@ const StayDetails = () => {
     libraries: ['places']
   });
   
-  // Get location coordinates from the stay data, not hardcoded
+  // Get location coordinates from the stay data
   const locationCoords = stay?.coordinates || {
     lat: 40.7128,
     lng: -74.0060
   };
 
+  // Helper function to get full image URL
   const getFullImageUrl = (url: string) => {
     if (!url) return '/placeholder-stay.jpg';
     if (url.startsWith('http')) return url;
-    return `${import.meta.env.VITE_BACKEND_URL}${url}`;
+    return `${import.meta.env.VITE_BACKEND_URL || ''}${url}`;
   };
 
+  // Fetch the stay data
   useEffect(() => {
     const fetchStay = async () => {
+      if (!id) return;
+      
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/stays/${id}`);
-        if (!response.ok) throw new Error('Failed to fetch stay');
-        const data = await response.json();
-        // Process the images URLs
-        const processedData = {
-          ...data,
-          images: data.images.map((img: { url: string; order?: number }, index: number) => ({
-            url: getFullImageUrl(img.url),
-            order: img.order ?? index
-          })),
-          host: {
-            ...data.host,
-            image: getFullImageUrl(data.host.image)
-          }
-        };
-        setStay(processedData);
+        setLoading(true);
+        const data = await stayService.getStayById(parseInt(id));
+        if (data) {
+          setStay(data);
+          console.log('Fetched stay data:', data);
+        }
       } catch (error) {
-        console.error('Error:', error);
+        console.error('Error fetching stay:', error);
       } finally {
         setLoading(false);
       }
@@ -124,14 +90,55 @@ const StayDetails = () => {
     fetchStay();
   }, [id]);
 
-  const toggleFavorite = () => {
-    setIsFavorite(!isFavorite);
+  // Check if the stay is in user's favorites
+  useEffect(() => {
+    const checkFavoriteStatus = async () => {
+      if (user?.id && id) {
+        try {
+          const favorites = await stayService.getFavorites(user.id);
+          setIsFavorite(favorites.includes(parseInt(id)));
+        } catch (error) {
+          console.error('Error checking favorite status:', error);
+        }
+      }
+    };
+
+    checkFavoriteStatus();
+  }, [user, id]);
+
+  const toggleFavorite = async () => {
+    if (!id) return;
+    
+    if (user?.id) {
+      try {
+        const success = await stayService.toggleFavorite(parseInt(id), user.id);
+        if (success) {
+          setIsFavorite(!isFavorite);
+        }
+      } catch (error) {
+        console.error('Error toggling favorite:', error);
+      }
+    } else {
+      // If no user is logged in, just toggle the UI state
+      // In a real app, this would prompt a login
+      setIsFavorite(!isFavorite);
+    }
   };
 
   const openImageDialog = (index: number) => {
     setSelectedImageIndex(index);
     setIsImageDialogOpen(true);
   };
+
+  // Find the price for the selected date
+  const getSelectedDatePrice = () => {
+    if (!stay?.availability || !selectedDate) return null;
+    
+    const dateString = format(selectedDate, 'yyyy-MM-dd');
+    return stay.availability.find(a => a.date === dateString);
+  };
+
+  const selectedDateInfo = getSelectedDatePrice();
 
   if (loading) {
     return (
@@ -329,7 +336,7 @@ const StayDetails = () => {
                       <Home className="w-5 h-5 text-primary" />
                       <div>
                         <p className="font-medium">Property Type</p>
-                        <p className="text-sm text-muted-foreground">Entire home</p>
+                        <p className="text-sm text-muted-foreground">{stay.details.propertyType || 'Entire home'}</p>
                       </div>
                     </div>
                   </div>
@@ -541,20 +548,16 @@ const StayDetails = () => {
                   selected={selectedDate}
                   onSelect={setSelectedDate}
                   availableDates={stay.availability
-                    .filter(a => a.is_available)
+                    ?.filter(a => a.is_available)
                     .map(a => new Date(a.date))}
                 />
                 
-                {selectedDate && (
+                {selectedDateInfo && (
                   <div className="space-y-2 p-4 bg-primary/5 rounded-lg">
-                    {stay.availability
-                      .filter(a => a.date === format(selectedDate, 'yyyy-MM-dd'))
-                      .map((slot, index) => (
-                        <div key={index} className="flex justify-between items-center">
-                          <span>Price for {format(selectedDate, 'MMM dd, yyyy')}:</span>
-                          <span className="font-semibold">${slot.price}</span>
-                        </div>
-                      ))}
+                    <div className="flex justify-between items-center">
+                      <span>Price for {format(selectedDate!, 'MMM dd, yyyy')}:</span>
+                      <span className="font-semibold">${selectedDateInfo.price}</span>
+                    </div>
                   </div>
                 )}
                 

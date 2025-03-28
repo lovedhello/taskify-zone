@@ -1,9 +1,15 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { GoogleMap, MarkerF, useLoadScript } from '@react-google-maps/api';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { MapPin, Search, Loader2 } from 'lucide-react';
 import { useDebounce } from '@/hooks/useDebounce';
+
+// Define libraries array as a static constant outside the component
+const mapLibraries = ['places'] as ["places"];
+
+// Create a dummy div once for PlacesService
+const dummyMapElement = typeof document !== 'undefined' ? document.createElement('div') : null;
 
 interface Location {
   address: string;
@@ -27,27 +33,59 @@ export const MapLocationPicker = ({ value, onChange, error }: MapLocationPickerP
   const [searchInput, setSearchInput] = useState('');
   const [suggestions, setSuggestions] = useState<google.maps.places.AutocompletePrediction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [mapCenter, setMapCenter] = useState(defaultCenter);
+  const [mapCenter, setMapCenter] = useState(() => {
+    // Initialize with value coordinates if available, otherwise use default
+    return (value.latitude && value.longitude) 
+      ? { lat: value.latitude, lng: value.longitude }
+      : defaultCenter;
+  });
+  
   const geocoder = useRef<google.maps.Geocoder | null>(null);
   const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
   const placesService = useRef<google.maps.places.PlacesService | null>(null);
 
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE',
-    libraries: ['places']
+    libraries: mapLibraries
   });
 
   const debouncedSearchInput = useDebounce(searchInput, 300);
 
   // Initialize services when map loads
   useEffect(() => {
-    if (isLoaded) {
-      const map = new google.maps.Map(document.createElement('div'));
+    if (!isLoaded || !dummyMapElement) return;
+      
+    if (!autocompleteService.current) {
       autocompleteService.current = new google.maps.places.AutocompleteService();
-      placesService.current = new google.maps.places.PlacesService(map);
+    }
+    
+    if (!placesService.current) {
+      placesService.current = new google.maps.places.PlacesService(dummyMapElement);
+    }
+    
+    if (!geocoder.current) {
       geocoder.current = new google.maps.Geocoder();
     }
   }, [isLoaded]);
+
+  // Update search input when the value changes from outside
+  useEffect(() => {
+    if (value.address && !searchInput) {
+      setSearchInput(value.address);
+    }
+    
+    if (value.latitude && value.longitude) {
+      setMapCenter({ lat: value.latitude, lng: value.longitude });
+    }
+  }, [value]);
+
+  useEffect(() => {
+    if (debouncedSearchInput) {
+      handleSearch(debouncedSearchInput);
+    } else {
+      setSuggestions([]);
+    }
+  }, [debouncedSearchInput]);
 
   const handleSearch = useCallback(async (input: string) => {
     if (!input || !autocompleteService.current) return;
@@ -121,14 +159,15 @@ export const MapLocationPicker = ({ value, onChange, error }: MapLocationPickerP
     }
   }, [getLocationFromLatLng]);
 
-  const handleSuggestionSelect = async (prediction: google.maps.places.AutocompletePrediction) => {
+  const handleSuggestionSelect = useCallback(async (prediction: google.maps.places.AutocompletePrediction) => {
     setIsLoading(true);
     setSuggestions([]); // Clear suggestions immediately
     try {
-      if (!placesService.current) {
-        const map = new google.maps.Map(document.createElement('div'));
-        placesService.current = new google.maps.places.PlacesService(map);
+      if (!placesService.current && dummyMapElement) {
+        placesService.current = new google.maps.places.PlacesService(dummyMapElement);
       }
+
+      if (!placesService.current) return;
 
       const placeResult = await new Promise<google.maps.places.PlaceResult>((resolve, reject) => {
         placesService.current!.getDetails(
@@ -156,7 +195,23 @@ export const MapLocationPicker = ({ value, onChange, error }: MapLocationPickerP
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [getLocationFromLatLng]);
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchInput(e.target.value);
+  }, []);
+
+  // Memoize map options
+  const mapOptions = useMemo(() => ({
+    streetViewControl: false,
+    mapTypeControl: false,
+  }), []);
+
+  // Memoize marker icon
+  const markerIcon = useMemo(() => ({
+    url: '/images/location-marker.svg',
+    scaledSize: isLoaded ? new google.maps.Size(40, 40) : undefined
+  }), [isLoaded]);
 
   if (!isLoaded) return <div>Loading...</div>;
 
@@ -165,10 +220,7 @@ export const MapLocationPicker = ({ value, onChange, error }: MapLocationPickerP
       <div className="relative">
         <Input
           value={searchInput}
-          onChange={(e) => {
-            setSearchInput(e.target.value);
-            handleSearch(e.target.value);
-          }}
+          onChange={handleInputChange}
           placeholder="Search for an address..."
           className={`pr-10 ${error ? 'border-red-500' : ''}`}
         />
@@ -201,18 +253,12 @@ export const MapLocationPicker = ({ value, onChange, error }: MapLocationPickerP
           center={mapCenter}
           mapContainerClassName="w-full h-full"
           onClick={handleMapClick}
-          options={{
-            streetViewControl: false,
-            mapTypeControl: false,
-          }}
+          options={mapOptions}
         >
           {value.latitude && value.longitude && (
             <MarkerF
               position={{ lat: value.latitude, lng: value.longitude }}
-              icon={{
-                url: '/images/location-marker.svg',
-                scaledSize: new google.maps.Size(40, 40)
-              }}
+              icon={markerIcon}
             />
           )}
         </GoogleMap>

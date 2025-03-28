@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -27,6 +27,8 @@ import { Calendar as CalendarIcon, Loader2 } from "lucide-react";
 import { AmenitiesSelect } from "@/components/AmenitiesSelect";
 import { MapLocationPicker } from '@/components/form/MapLocationPicker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { createStay, updateStay, uploadStayImage, deleteStayImage, setStayPrimaryImage } from "@/services/hostService";
+import { supabase } from "@/integrations/supabase/client";
 
 const formSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -39,7 +41,7 @@ const formSchema = z.object({
   bathrooms: z.number().min(1, "Must have at least 1 bathroom"),
   images: z.array(z.string()),
   status: z.enum(["draft", "published"]),
-  amenities: z.array(z.number()),
+  amenities: z.array(z.string()),
   availability: z.array(z.object({
     date: z.string(),
     is_available: z.boolean(),
@@ -89,6 +91,7 @@ const HostStay = () => {
     longitude: 0,
     displayLocation: ''
   });
+  const [uploading, setUploading] = useState(false);
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -118,6 +121,14 @@ const HostStay = () => {
   const getFullImageUrl = (url: string) => {
     if (!url) return '/default-stay.jpg';
     if (url.startsWith('http')) return url;
+    // For Supabase storage URLs
+    if (url.startsWith('stay-images/')) {
+      const { data } = supabase.storage
+        .from('stay-images')
+        .getPublicUrl(url.replace('stay-images/', ''));
+      
+      return data.publicUrl;
+    }
     return `${import.meta.env.VITE_API_URL}/${url}`;
   };
 
@@ -125,60 +136,97 @@ const HostStay = () => {
     if (id) {
       const fetchStay = async () => {
         try {
-          const headers = getAuthHeader();
-          if (!headers) {
-            throw new Error('Not authenticated');
+          setLoading(true);
+
+          if (id === 'new') {
+            setLoading(false);
+            return;
           }
 
-          const response = await fetch(`${import.meta.env.VITE_API_URL}/host/stays/${id}`, {
-            headers: {
-              ...headers
-            }
-          });
+          const { data: stayData, error } = await supabase
+            .from('stays')
+            .select(`
+              *,
+              images:stay_images(id, image_path, is_primary, display_order)
+            `)
+            .eq('id', id)
+            .single();
 
-          if (!response.ok) throw new Error('Failed to fetch stay');
-
-          const data = await response.json();
+          if (error) {
+            throw error;
+          }
           
           // Process the images URLs
-          const processedImages = data.images.map((img: any) => 
-            typeof img === 'string' ? getFullImageUrl(img) : getFullImageUrl(img.url)
+          const processedImages = stayData.images.map((img: any) => 
+            getFullImageUrl(img.image_path)
           );
           setImages(processedImages);
           
+          // Fetch any availability data
+          const { data: availabilityData, error: availabilityError } = await supabase
+            .from('stay_availability')
+            .select('*')
+            .eq('stay_id', id);
+
+          if (availabilityError) {
+            console.error('Error fetching availability:', availabilityError);
+          }
+
+          const availability = availabilityData || [];
+          
+          // Ensure amenities is an array
+          const stayAmenities = Array.isArray(stayData.amenities) ? stayData.amenities : [];
+          
+          // If this stay has amenities, we need to fetch the full amenity details
+          if (stayAmenities.length > 0) {
+            // Query the amenities table for the selected amenities
+            const { data: amenityData } = await supabase
+              .from('amenities')
+              .select('*')
+              .in('id', stayAmenities);
+              
+            if (amenityData && amenityData.length > 0) {
+              setSelectedAmenities(amenityData);
+            }
+          }
+          
           form.reset({
-            title: data.title,
-            description: data.description,
-            location_name: data.location_name,
-            price_per_night: parseFloat(data.price_per_night),
-            max_guests: parseInt(data.max_guests),
-            bedrooms: parseInt(data.bedrooms),
-            beds: parseInt(data.beds) || parseInt(data.bedrooms),
-            bathrooms: parseInt(data.bathrooms) || 1,
+            title: stayData.title,
+            description: stayData.description,
+            location_name: stayData.location_name || stayData.location,
+            price_per_night: parseFloat(stayData.price_per_night),
+            max_guests: parseInt(stayData.max_guests),
+            bedrooms: parseInt(stayData.bedrooms),
+            beds: parseInt(stayData.beds) || parseInt(stayData.bedrooms),
+            bathrooms: parseInt(stayData.bathrooms) || 1,
             images: processedImages,
-            status: data.status,
-            amenities: data.amenities.map((a: any) => 
+            status: stayData.status,
+            amenities: stayAmenities.map((a: any) => 
               typeof a === 'object' ? a.id.toString() : a.toString()
             ),
-            availability: data.availability,
-            address: data.address,
-            zipcode: data.zipcode,
-            city: data.city,
-            state: data.state,
-            latitude: parseFloat(data.latitude),
-            longitude: parseFloat(data.longitude),
-            property_type: data.property_type || 'house'
+            availability: availability.map((item: any) => ({
+              date: item.date,
+              is_available: item.is_available,
+              price_override: item.price
+            })),
+            address: stayData.address,
+            zipcode: stayData.zipcode,
+            city: stayData.city,
+            state: stayData.state,
+            latitude: parseFloat(stayData.latitude),
+            longitude: parseFloat(stayData.longitude),
+            property_type: stayData.property_type || 'house'
           });
 
           // Update location state
           setLocation({
-            address: data.address,
-            zipcode: data.zipcode,
-            city: data.city,
-            state: data.state,
-            latitude: parseFloat(data.latitude),
-            longitude: parseFloat(data.longitude),
-            displayLocation: data.location_name
+            address: stayData.address,
+            zipcode: stayData.zipcode,
+            city: stayData.city,
+            state: stayData.state,
+            latitude: parseFloat(stayData.latitude),
+            longitude: parseFloat(stayData.longitude),
+            displayLocation: stayData.location_name || stayData.location
           });
         } catch (error) {
           console.error('Error:', error);
@@ -187,6 +235,8 @@ const HostStay = () => {
             description: "Failed to fetch stay",
             variant: "destructive",
           });
+        } finally {
+          setLoading(false);
         }
       };
 
@@ -197,12 +247,21 @@ const HostStay = () => {
   useEffect(() => {
     const fetchAmenities = async () => {
       try {
-        const response = await fetch(`${import.meta.env.VITE_API_URL}/host/amenities?type=stay`);
-        if (!response.ok) throw new Error('Failed to fetch amenities');
-        const data = await response.json();
-        setSelectedAmenities([]);
+        // Directly query the amenities from Supabase instead of using API
+        const { data, error } = await supabase
+          .from('amenities')
+          .select('*')
+          .eq('type', 'stay');
+
+        if (error) throw error;
+        
+        // Store all available amenities
+        setSelectedAmenities(data);
+        
+        // If editing a stay and it has amenities, we'll update the selected ones
+        // in the fetchStay function
       } catch (error) {
-        console.error('Error:', error);
+        console.error('Error fetching amenities:', error);
         setSelectedAmenities([]);
       }
     };
@@ -222,6 +281,163 @@ const HostStay = () => {
     }
   }, [location, form]);
 
+  // Memoize handlers for child components to prevent unnecessary re-renders
+  const handleAmenitiesChange = useCallback((amenities) => {
+    setSelectedAmenities(amenities);
+    form.setValue('amenities', amenities.map(a => a.id));
+  }, [form]);
+
+  const handleLocationChange = useCallback((newLocation) => {
+    console.log('Location selected:', newLocation);
+    setLocation({
+      ...newLocation,
+      displayLocation: newLocation.displayLocation || `${newLocation.city}, ${newLocation.state}`
+    });
+    form.setValue('location_name', newLocation.displayLocation || `${newLocation.city}, ${newLocation.state}`);
+  }, [form]);
+
+  const handleImageUpload = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0 || uploading) return;
+    
+    // Set uploading mutex to prevent multiple simultaneous uploads
+    setUploading(true);
+    
+    // Validate files before uploading
+    const validFiles: File[] = [];
+    const maxSizeMB = 10;
+    const maxSizeBytes = maxSizeMB * 1024 * 1024; // 10MB in bytes
+    
+    // Check each file
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      // Check file size
+      if (file.size > maxSizeBytes) {
+        toast({
+          title: "Error",
+          description: `File ${file.name} exceeds the ${maxSizeMB}MB size limit`,
+          variant: "destructive",
+        });
+        continue;
+      }
+      
+      // Verify it's an image
+      if (!file.type.startsWith('image/')) {
+        toast({
+          title: "Error",
+          description: `File ${file.name} is not a valid image`,
+          variant: "destructive",
+        });
+        continue;
+      }
+      
+      validFiles.push(file);
+    }
+    
+    if (validFiles.length === 0) {
+      setUploading(false);
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      // Get the current images from the form
+      const currentImages = form.getValues('images') || [];
+      
+      if (id && id !== 'new') {
+        // We're editing an existing stay
+        let successCount = 0;
+        
+        for (let i = 0; i < validFiles.length; i++) {
+          const file = validFiles[i];
+          const isPrimary = currentImages.length === 0 && i === 0;
+          
+          try {
+            const result = await uploadStayImage(
+              id,
+              file,
+              isPrimary,
+              i
+            );
+            
+            if (result) {
+              const newImage = getFullImageUrl(result.image_path);
+              currentImages.push(newImage);
+              successCount++;
+            }
+          } catch (error) {
+            console.error(`Error uploading image ${file.name}:`, error);
+            // Continue with other files
+          }
+        }
+        
+        // Update form with successfully uploaded images
+        if (successCount > 0) {
+          form.setValue('images', currentImages);
+          toast({
+            title: "Success",
+            description: successCount === validFiles.length 
+              ? "All images uploaded successfully" 
+              : `${successCount} of ${validFiles.length} images uploaded successfully`,
+          });
+        } else {
+          toast({
+            title: "Error",
+            description: "Failed to upload any images",
+            variant: "destructive",
+          });
+        }
+      } else {
+        // For new stays, convert files to base64 for later upload
+        try {
+          const base64Images = await Promise.all(
+            validFiles.map(async (file) => {
+              return new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  resolve(reader.result as string);
+                };
+                reader.onerror = () => {
+                  reject(new Error(`Failed to read file ${file.name}`));
+                };
+                reader.readAsDataURL(file);
+              });
+            })
+          );
+          
+          form.setValue('images', [...currentImages, ...base64Images]);
+          
+          toast({
+            title: "Success",
+            description: "Images added successfully",
+          });
+        } catch (error) {
+          console.error('Error converting images to base64:', error);
+          toast({
+            title: "Error",
+            description: "Failed to process images",
+            variant: "destructive",
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error uploading images:', error);
+      toast({
+        title: "Error",
+        description: "Failed to upload images",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+      setUploading(false);
+      
+      // Clear the file input to allow re-selection of the same file
+      const fileInput = document.getElementById('image-upload') as HTMLInputElement;
+      if (fileInput) {
+        fileInput.value = '';
+      }
+    }
+  }, [form, id, toast, getFullImageUrl, uploading]);
+
   const onSubmit = async (data: FormData) => {
     if (!location.address) {
       toast({
@@ -234,14 +450,8 @@ const HostStay = () => {
 
     setLoading(true);
     try {
-      const headers = getAuthHeader();
-      if (!headers) {
-        throw new Error('Not authenticated');
-      }
-
-      const formData = new FormData();
-      
-      const dataToSend = {
+      // Add location data to the form data
+      const stayData = {
         ...data,
         address: location.address,
         zipcode: location.zipcode,
@@ -249,103 +459,111 @@ const HostStay = () => {
         state: location.state,
         latitude: location.latitude,
         longitude: location.longitude,
-        location_name: location.displayLocation || `${location.city}, ${location.state}`
+        location_name: location.displayLocation || `${location.city}, ${location.state}`,
+        // Ensure amenities is an array
+        amenities: Array.isArray(data.amenities) ? data.amenities : [],
+        // Preserve the existing status instead of always setting to draft
+        status: data.status
       };
 
-      // Add regular form fields
-      Object.entries(dataToSend).forEach(([key, value]) => {
-        if (key === 'amenities' && Array.isArray(value)) {
-          formData.append(key, JSON.stringify(value));
-        } else if (key === 'availability' && Array.isArray(value)) {
-          formData.append(key, JSON.stringify(value));
-        } else if (key !== 'images') { // Skip images in the regular form data
-          formData.append(key, value?.toString() || '');
-        }
-      });
+      // Process any existing images
+      const existingImages = stayData.images?.filter((img: any) => 
+        typeof img === 'string' && (img.startsWith('http') || img.startsWith('/uploads/'))
+      ) || [];
 
-      // Handle images separately
-      if (data.images && data.images.length > 0) {
-        // For existing images that are URLs or uploaded paths, pass them as a JSON string
-        const existingImages = data.images.filter(img => 
-          img.startsWith('http') || img.startsWith('/uploads/')
-        );
-        if (existingImages.length > 0) {
-          formData.append('existing_images', JSON.stringify(existingImages));
-          console.log('Existing images:', existingImages);
-        }
+      let stayId = id;
+      
+      if (id && id !== 'new') {
+        // Update existing stay
+        await updateStay(id, stayData);
+        toast({
+          title: "Success",
+          description: "Stay updated successfully",
+        });
+      } else {
+        // Create new stay
+        const newStay = await createStay(stayData);
+        stayId = newStay.id;
+        toast({
+          title: "Success",
+          description: "Stay created successfully",
+        });
         
-        // For new file uploads, append each file to the FormData
-        const newImageFiles = data.images.filter(img => 
-          !img.startsWith('http') && !img.startsWith('/uploads/')
-        );
-        console.log('New images to process:', newImageFiles.length);
-        if (newImageFiles.length > 0) {
-          newImageFiles.forEach((file: File | string, index) => {
-            // Check if the file is already a File object
-            if (typeof File !== 'undefined' && file instanceof File) {
-              formData.append('images', file);
-              console.log('Appending File object:', file.name);
-            } 
-            // Check if it's a base64 string
-            else if (typeof file === 'string' && file.includes('base64')) {
-              try {
-                const base64Data = file.split(',')[1];
-                const mimeType = file.split(',')[0].split(':')[1].split(';')[0];
+        // Refresh user data to update host status in the UI
+        await refreshUser();
+      }
+
+      // Handle new image uploads if we have a valid stayId
+      if (stayId && data.images && data.images.length > 0) {
+        try {
+          // Get only new images (not already URLs)
+          const newImages = data.images.filter((img: any) => 
+            !(typeof img === 'string' && (img.startsWith('http') || img.startsWith('/uploads/')))
+          );
+          
+          // Try to upload each image one by one
+          for (let i = 0; i < newImages.length; i++) {
+            const img: any = newImages[i];
+            
+            try {
+              // Skip if it's null or undefined
+              if (!img) continue;
+              
+              // Handle base64 images
+              if (typeof img === 'string' && img.includes('base64')) {
+                const base64Data = img.split(',')[1];
+                const mimeType = img.split(',')[0].split(':')[1].split(';')[0];
                 const byteCharacters = atob(base64Data);
                 const byteArrays = [];
                 
-                for (let i = 0; i < byteCharacters.length; i++) {
-                  byteArrays.push(byteCharacters.charCodeAt(i));
+                for (let j = 0; j < byteCharacters.length; j++) {
+                  byteArrays.push(byteCharacters.charCodeAt(j));
                 }
                 
                 const byteArray = new Uint8Array(byteArrays);
                 const blob = new Blob([byteArray], { type: mimeType });
-                const fileObject = new File([blob], `image_${index}.jpg`, { type: mimeType });
+                const fileObject = new File([blob], `image_${i}.jpg`, { type: mimeType });
                 
-                formData.append('images', fileObject);
-                console.log('Appended converted base64 to File:', fileObject.name, fileObject.type, fileObject.size);
-              } catch (e) {
-                console.error('Error processing base64 image:', e);
-                // Skip this file if there's an error processing it
-                return;
+                // Upload the file
+                await uploadStayImage(
+                  stayId.toString(), 
+                  fileObject,
+                  i === 0 && existingImages.length === 0, // Set as primary if it's the first image
+                  i
+                );
+              } 
+              // Handle File objects
+              else if (img && typeof img === 'object' && 'name' in img && 'type' in img) {
+                await uploadStayImage(
+                  stayId.toString(), 
+                  img, 
+                  i === 0 && existingImages.length === 0, // Set as primary if it's the first image
+                  i
+                );
               }
-            } else {
-              console.warn('Skipping invalid image data:', typeof file);
+            } catch (innerError) {
+              console.error(`Error uploading image ${i}:`, innerError);
+              // Continue with next image
             }
+          }
+          
+          if (newImages.length > 0) {
+            toast({
+              title: "Success",
+              description: "Images uploaded successfully",
+            });
+          }
+        } catch (error) {
+          console.error('Error handling image uploads:', error);
+          toast({
+            title: "Warning",
+            description: "Stay was saved but some images failed to upload",
+            variant: "destructive",
           });
         }
       }
 
-      console.log('Submitting form data:', Object.fromEntries(formData));
-
-      const url = id 
-        ? `${import.meta.env.VITE_API_URL}/host/stays/${id}`
-        : `${import.meta.env.VITE_API_URL}/host/stays`;
-
-      const response = await fetch(url, {
-        method: id ? 'PUT' : 'POST',
-        headers: {
-          ...headers
-        },
-        body: formData
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to save stay');
-      }
-
-      const responseData = await response.json();
-      console.log('Response data:', responseData);
-
-      // Refresh user data to update host status
-      await refreshUser();
-
-      toast({
-        title: "Success",
-        description: `Stay ${id ? 'updated' : 'created'} successfully`,
-      });
-
+      // Navigate back to the dashboard
       navigate('/host/dashboard');
     } catch (error) {
       console.error('Error saving stay:', error);
@@ -359,15 +577,10 @@ const HostStay = () => {
     }
   };
 
-  const handlePublish = () => {
-    form.setValue('status', 'published');
-    form.handleSubmit(onSubmit)();
-  };
-
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <h1 className="text-3xl font-bold mb-8">
-        {id ? 'Edit Stay' : 'Create Stay'}
+        {id && id !== 'new' ? 'Edit Stay' : 'Create Stay'}
       </h1>
       
       <Form {...form}>
@@ -559,10 +772,8 @@ const HostStay = () => {
                 <Label>Amenities</Label>
                 <AmenitiesSelect
                   selectedAmenities={selectedAmenities}
-                  onAmenitiesChange={(amenities) => {
-                    setSelectedAmenities(amenities);
-                    form.setValue('amenities', amenities.map(a => Number(a.id)));
-                  }}
+                  type="stay"
+                  onAmenitiesChange={handleAmenitiesChange}
                 />
               </div>
 
@@ -573,14 +784,69 @@ const HostStay = () => {
                   <FormItem>
                     <FormLabel>Images</FormLabel>
                     <FormControl>
-                      <ImageUpload
-                        value={field.value}
-                        onChange={field.onChange}
-                        onRemove={(url) => {
-                          field.onChange(field.value.filter((val) => val !== url));
-                        }}
-                        title={form.getValues("title") || "stay"}
-                      />
+                      <div className="space-y-4">
+                        {/* Simple image upload UI */}
+                        <div className="border-2 border-dashed rounded-lg p-6 cursor-pointer hover:border-primary">
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/*"
+                            className="hidden"
+                            id="image-upload"
+                            disabled={loading}
+                            onChange={(e) => handleImageUpload(e.target.files)}
+                          />
+                          <label htmlFor="image-upload" className="flex flex-col items-center justify-center text-sm text-gray-600 cursor-pointer">
+                            {loading ? (
+                              <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                            ) : (
+                              <>
+                                <div className="h-10 w-10 mb-2 text-gray-400">
+                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                                  </svg>
+                                </div>
+                                <p className="text-center">
+                                  Drag & drop images here, or click to select
+                                  <br />
+                                  <span className="text-xs text-gray-400">
+                                    PNG, JPG, GIF up to 10MB
+                                  </span>
+                                </p>
+                              </>
+                            )}
+                          </label>
+                        </div>
+
+                        {/* Display uploaded images */}
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                          {field.value?.map((url, index) => (
+                            <div key={index} className="relative group rounded-lg overflow-hidden border border-gray-200 bg-white aspect-video">
+                              <img 
+                                src={typeof url === 'string' ? url : URL.createObjectURL(url as unknown as Blob)}
+                                alt={`Stay image ${index + 1}`}
+                                className="w-full h-full object-cover"
+                                loading="lazy"
+                              />
+                              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all flex items-center justify-center">
+                                <button 
+                                  onClick={() => {
+                                    const newImages = [...field.value];
+                                    newImages.splice(index, 1);
+                                    field.onChange(newImages);
+                                  }}
+                                  type="button"
+                                  className="opacity-0 group-hover:opacity-100 bg-red-600 hover:bg-red-700 text-white rounded-full p-2"
+                                >
+                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -591,14 +857,7 @@ const HostStay = () => {
                 <FormLabel>Location</FormLabel>
                 <MapLocationPicker
                   value={location}
-                  onChange={(newLocation) => {
-                    console.log('Location selected:', newLocation);
-                    setLocation({
-                      ...newLocation,
-                      displayLocation: newLocation.displayLocation || `${newLocation.city}, ${newLocation.state}`
-                    });
-                    form.setValue('location_name', newLocation.displayLocation || `${newLocation.city}, ${newLocation.state}`);
-                  }}
+                  onChange={handleLocationChange}
                   error={form.formState.errors.address?.message}
                 />
                 {!location.address && (
@@ -661,27 +920,44 @@ const HostStay = () => {
             <Button
               type="button"
               variant="outline"
-              onClick={() => {
-                form.setValue('status', 'draft');
-                form.handleSubmit(onSubmit)();
-              }}
+              onClick={() => navigate('/host/dashboard')}
               disabled={loading}
             >
-              Save as Draft
+              Cancel
             </Button>
+            {id && id !== 'new' && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  form.setValue('status', form.getValues('status') === 'published' ? 'draft' : 'published');
+                  form.handleSubmit(onSubmit)();
+                }}
+                disabled={loading || !location.address}
+                className="bg-green-600 text-white hover:bg-green-700"
+              >
+                {loading ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Processing...
+                  </div>
+                ) : (
+                  form.getValues('status') === 'published' ? "Unpublish" : "Publish"
+                )}
+              </Button>
+            )}
             <Button
-              type="button"
-              onClick={handlePublish}
+              type="submit"
               disabled={loading || !location.address}
               className="bg-primary hover:bg-primary/90"
             >
               {loading ? (
                 <div className="flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  {id ? "Updating..." : "Publishing..."}
+                  {id && id !== 'new' ? "Saving Changes..." : "Creating Stay..."}
                 </div>
               ) : (
-                id ? "Update Stay" : "Publish Stay"
+                id && id !== 'new' ? "Save Changes" : "Create Stay"
               )}
             </Button>
           </div>

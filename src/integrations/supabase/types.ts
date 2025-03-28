@@ -9,7 +9,210 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      stays: {
+        Row: {
+          id: string
+          host_id: string
+          title: string
+          description: string
+          price_per_night: number
+          bedrooms: number
+          beds: number
+          bathrooms: number
+          max_guests: number
+          amenities: string[]
+          property_type: string | null
+          location: string
+          zipcode: string | null
+          latitude: number | null
+          longitude: number | null
+          is_featured: boolean
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          host_id: string
+          title: string
+          description: string
+          price_per_night: number
+          bedrooms?: number
+          beds?: number
+          bathrooms?: number
+          max_guests?: number
+          amenities?: string[]
+          property_type?: string | null
+          location: string
+          zipcode?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          is_featured?: boolean
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          host_id?: string
+          title?: string
+          description?: string
+          price_per_night?: number
+          bedrooms?: number
+          beds?: number
+          bathrooms?: number
+          max_guests?: number
+          amenities?: string[]
+          property_type?: string | null
+          location?: string
+          zipcode?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          is_featured?: boolean
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      stay_images: {
+        Row: {
+          id: string
+          stay_id: string
+          url: string
+          display_order: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          stay_id: string
+          url: string
+          display_order?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          stay_id?: string
+          url?: string
+          display_order?: number
+          created_at?: string
+        }
+      }
+      stay_availability: {
+        Row: {
+          id: string
+          stay_id: string
+          date: string
+          price: number
+          is_available: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          stay_id: string
+          date: string
+          price: number
+          is_available?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          stay_id?: string
+          date?: string
+          price?: number
+          is_available?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      stay_reviews: {
+        Row: {
+          id: string
+          stay_id: string
+          user_id: string
+          rating: number
+          comment: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          stay_id: string
+          user_id: string
+          rating: number
+          comment?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          stay_id?: string
+          user_id?: string
+          rating?: number
+          comment?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      user_favorites: {
+        Row: {
+          id: string
+          user_id: string
+          stay_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          stay_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          stay_id?: string
+          created_at?: string
+        }
+      }
+      stay_bookings: {
+        Row: {
+          id: string
+          stay_id: string
+          user_id: string
+          start_date: string
+          end_date: string
+          num_guests: number
+          total_price: number
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          stay_id: string
+          user_id: string
+          start_date: string
+          end_date: string
+          num_guests: number
+          total_price: number
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          stay_id?: string
+          user_id?: string
+          start_date?: string
+          end_date?: string
+          num_guests?: number
+          total_price?: number
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
