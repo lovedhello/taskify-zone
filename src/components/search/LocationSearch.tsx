@@ -2,9 +2,17 @@ import { useState, useEffect, useRef } from 'react';
 import { Search, MapPin, Loader2, Navigation } from 'lucide-react';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
-import { useLoadScript, GoogleMap, MarkerF } from '@react-google-maps/api';
+import { useLoadScript, GoogleMap, MarkerF, Libraries } from '@react-google-maps/api';
 import { useNavigate } from 'react-router-dom';
 import { MapLoading } from '../ui/loading';
+import { stayService, Stay } from '@/services/stayService';
+import { getFoodExperiences } from '@/services/foodExperienceService';
+
+// Define libraries as a constant to prevent reloading
+const libraries: Libraries = ['places'];
+
+// Create a centralized Google Maps API key
+const GOOGLE_MAPS_API_KEY = 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE';
 
 interface Location {
   address: string;
@@ -17,7 +25,7 @@ interface Location {
 }
 
 interface Listing {
-  id: number;
+  id: string;
   title: string;
   type: 'food' | 'stay';
   latitude: number;
@@ -38,9 +46,13 @@ const LocationSearch = ({ onLocationSelect }: LocationSearchProps) => {
   const placesService = useRef<google.maps.places.PlacesService | null>(null);
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Use the LoadScript hook with memoized libraries array
   const { isLoaded } = useLoadScript({
-    googleMapsApiKey: 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE',
-    libraries: ['places']
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    libraries,
+    // Add a unique ID to ensure only one instance loads
+    id: 'google-map-script'
   });
 
   useEffect(() => {
@@ -91,6 +103,40 @@ const LocationSearch = ({ onLocationSelect }: LocationSearchProps) => {
     }
   };
 
+  const fetchNearbyListings = async (zipcode: string) => {
+    try {
+      // Fetch both stays and food experiences in parallel
+      const [stays, foodExperiences] = await Promise.all([
+        stayService.getStays({ zipcode }),
+        getFoodExperiences({ zipcode })
+      ]);
+      
+      // Convert stays to listing format
+      const stayListings = stays.map(stay => ({
+        id: stay.id,
+        title: stay.title,
+        type: 'stay' as const,
+        latitude: stay.coordinates?.lat || 0,
+        longitude: stay.coordinates?.lng || 0
+      })).filter(listing => listing.latitude !== 0 && listing.longitude !== 0);
+      
+      // Convert food experiences to listing format
+      const foodListings = foodExperiences.map(food => ({
+        id: food.id,
+        title: food.title,
+        type: 'food' as const,
+        latitude: food.coordinates?.lat || 0,
+        longitude: food.coordinates?.lng || 0
+      })).filter(listing => listing.latitude !== 0 && listing.longitude !== 0);
+      
+      // Combine both types of listings
+      return [...stayListings, ...foodListings];
+    } catch (error) {
+      console.error('Error fetching nearby listings:', error);
+      return [];
+    }
+  };
+
   const handleLocationSelect = async (location: Location) => {
     setIsLoading(true);
     if (!placesService.current) {
@@ -133,12 +179,9 @@ const LocationSearch = ({ onLocationSelect }: LocationSearchProps) => {
       setShowMap(true);
       setSuggestions([]); // Clear suggestions when location is selected
 
-      // Fetch nearby listings
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/listings/nearby?lat=${updatedLocation.latitude}&lng=${updatedLocation.longitude}`
-      );
-      const data = await response.json();
-      setNearbyListings(data);
+      // Fetch nearby listings (both stays and food)
+      const listings = await fetchNearbyListings(zipcode);
+      setNearbyListings(listings);
     } catch (error) {
       console.error('Error fetching location details:', error);
     } finally {
@@ -171,8 +214,14 @@ const LocationSearch = ({ onLocationSelect }: LocationSearchProps) => {
         try {
           const { latitude, longitude } = position.coords;
           const response = await fetch(
-            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE`
+            `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`
           );
+          
+          // Check if response is ok before parsing JSON
+          if (!response.ok) {
+            throw new Error(`Error fetching geocoding data: ${response.status} ${response.statusText}`);
+          }
+          
           const data = await response.json();
           
           if (data.results[0]) {
@@ -195,11 +244,8 @@ const LocationSearch = ({ onLocationSelect }: LocationSearchProps) => {
             setShowMap(true);
             setSearchInput(location.address);
             
-            // Fetch nearby listings
-            const listingsResponse = await fetch(
-              `${import.meta.env.VITE_API_URL}/listings/nearby?lat=${latitude}&lng=${longitude}`
-            );
-            const listings = await listingsResponse.json();
+            // Fetch nearby listings (both stays and food)
+            const listings = await fetchNearbyListings(zipcode);
             setNearbyListings(listings);
           }
         } catch (error) {

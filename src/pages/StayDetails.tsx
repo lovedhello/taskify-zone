@@ -34,9 +34,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
-import { useLoadScript, GoogleMap, MarkerF } from '@react-google-maps/api';
+import { useLoadScript, GoogleMap, MarkerF, Libraries } from '@react-google-maps/api';
 import { stayService, type Stay } from "@/services/stayService";
 import { useAuth } from "@/contexts/AuthContext";
+
+// Define libraries as a constant outside the component to prevent re-creation on each render
+const mapLibraries: Libraries = ['places'];
+
+// Create a centralized Google Maps API key
+const GOOGLE_MAPS_API_KEY = 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE';
 
 const StayDetails = () => {
   const { id } = useParams<{ id: string }>();
@@ -49,10 +55,11 @@ const StayDetails = () => {
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   
-  // Google Maps API loading
+  // Google Maps API loading with static libraries array
   const { isLoaded } = useLoadScript({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
-    libraries: ['places']
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    libraries: mapLibraries,
+    id: 'google-map-script'
   });
   
   // Get location coordinates from the stay data
@@ -75,7 +82,7 @@ const StayDetails = () => {
       
       try {
         setLoading(true);
-        const data = await stayService.getStayById(parseInt(id));
+        const data = await stayService.getStayById(id);
         if (data) {
           setStay(data);
           console.log('Fetched stay data:', data);
@@ -90,13 +97,15 @@ const StayDetails = () => {
     fetchStay();
   }, [id]);
 
-  // Check if the stay is in user's favorites
+  // Check if the stay is in user's favorites - using a ref to prevent multiple fetches
+  const favoritesChecked = useRef(false);
   useEffect(() => {
     const checkFavoriteStatus = async () => {
-      if (user?.id && id) {
+      if (user?.id && id && !favoritesChecked.current) {
         try {
+          favoritesChecked.current = true; // Mark as checked to prevent repeated calls
           const favorites = await stayService.getFavorites(user.id);
-          setIsFavorite(favorites.includes(parseInt(id)));
+          setIsFavorite(favorites.includes(id));
         } catch (error) {
           console.error('Error checking favorite status:', error);
         }
@@ -111,9 +120,11 @@ const StayDetails = () => {
     
     if (user?.id) {
       try {
-        const success = await stayService.toggleFavorite(parseInt(id), user.id);
+        const success = await stayService.toggleFavorite(id, user.id);
         if (success) {
           setIsFavorite(!isFavorite);
+          // Reset the ref if the user manually toggles a favorite
+          favoritesChecked.current = true;
         }
       } catch (error) {
         console.error('Error toggling favorite:', error);
@@ -347,12 +358,17 @@ const StayDetails = () => {
                 <Card className="p-6">
                   <h2 className="text-2xl font-semibold mb-4">What this place offers</h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {stay.details.amenities.map((amenity, index) => (
-                      <div key={index} className="flex items-center gap-2 p-2 rounded-md hover:bg-primary/5">
-                        <Wifi className="w-5 h-5 text-primary" />
-                        <span>{amenity}</span>
+                    {Array.isArray(stay.details.amenities) ? 
+                      stay.details.amenities.map((amenity, index) => (
+                        <div key={index} className="flex items-center gap-2 p-2 rounded-md hover:bg-primary/5">
+                          <Wifi className="w-5 h-5 text-primary" />
+                          <span>{amenity}</span>
+                        </div>
+                      )) : 
+                      <div className="col-span-2 text-center text-muted-foreground py-4">
+                        No amenities listed for this property.
                       </div>
-                    ))}
+                    }
                   </div>
                 </Card>
               </TabsContent>

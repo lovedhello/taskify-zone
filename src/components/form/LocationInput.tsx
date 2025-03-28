@@ -2,7 +2,13 @@ import { useState, useRef } from 'react';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { MapPin, Loader2 } from 'lucide-react';
-import { useLoadScript } from '@react-google-maps/api';
+import { useLoadScript, Libraries } from '@react-google-maps/api';
+
+// Define libraries as a constant to prevent reloading
+const libraries: Libraries = ['places'];
+
+// Create a centralized Google Maps API key
+const GOOGLE_MAPS_API_KEY = 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE';
 
 interface Location {
   address: string;
@@ -27,8 +33,10 @@ export const LocationInput = ({ value, onChange, error }: LocationInputProps) =>
   const placesService = useRef<google.maps.places.PlacesService | null>(null);
 
   const { isLoaded } = useLoadScript({
-    googleMapsApiKey: 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE',
-    libraries: ['places']
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    libraries,
+    // Add a unique ID to ensure only one instance loads
+    id: 'google-map-script'
   });
 
   const handleSearch = async (input: string) => {

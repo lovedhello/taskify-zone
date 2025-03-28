@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import MainLayout from "@/components/layout/MainLayout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { DatePickerWithRange } from "@/components/ui/date-range-picker";
 import { addDays, format, isWithinInterval, parseISO } from "date-fns";
 import { SortSelect } from '@/components/filters/SortSelect';
-import { GoogleMap, MarkerF, useLoadScript } from '@react-google-maps/api';
+import { GoogleMap, MarkerF, useLoadScript, Libraries } from '@react-google-maps/api';
 import { LoadingSpinner } from '@/components/ui/loading';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from "@/components/ui/checkbox";
@@ -29,6 +29,12 @@ const propertyTypes = [
   { id: 'cottage', label: 'Cottage', description: 'A charming cottage' },
   { id: 'guesthouse', label: 'Guesthouse', description: 'A separate guesthouse' },
 ];
+
+// Define libraries as a static constant to prevent re-creation on each render
+const mapLibraries: Libraries = ['places'];
+
+// Create a centralized Google Maps API key
+const GOOGLE_MAPS_API_KEY = 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE';
 
 // Bedroom options
 const bedroomOptions = [
@@ -75,15 +81,16 @@ const Stays = () => {
   const [location, setLocation] = useState<string | null>(searchParams.get('location'));
   const [bedrooms, setBedrooms] = useState("any");
   const [guests, setGuests] = useState("any");
-  const [favorites, setFavorites] = useState<string[]>([]);
   const [availability, setAvailability] = useState("any");
   const [applyButtonAnimation, setApplyButtonAnimation] = useState(false);
   const [resetButtonAnimation, setResetButtonAnimation] = useState(false);
   const { user } = useAuth();
 
   const { isLoaded } = useLoadScript({
-    googleMapsApiKey: 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE',
-    libraries: ['places']
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    libraries: mapLibraries,
+    // Add a unique ID to ensure only one instance loads
+    id: 'google-map-script'
   });
 
   // Helper function to get full image URL
@@ -99,21 +106,7 @@ const Stays = () => {
     setLocation(searchParams.get('location'));
   }, [searchParams]);
 
-  // Fetch user's favorites when user changes
-  useEffect(() => {
-    const fetchFavorites = async () => {
-      if (user?.id) {
-        try {
-          const userFavorites = await stayService.getFavorites(user.id);
-          setFavorites(userFavorites);
-        } catch (error) {
-          console.error('Failed to fetch favorites:', error);
-        }
-      }
-    };
-
-    fetchFavorites();
-  }, [user]);
+  
 
   useEffect(() => {
     const fetchStays = async () => {
@@ -143,143 +136,120 @@ const Stays = () => {
   }, [searchParams, sortBy, zipcode, location, searchQuery, selectedTypes]);
 
   // Apply client-side filtering for things that the backend doesn't handle yet
-  const filteredStays = stays.filter(stay => {
-    // Apply bedroom filter - only if a specific option is selected
-    if (bedrooms !== "any") {
-      if (bedrooms === "4+" && stay.details.bedrooms < 4) {
-        return false;
-      } else if (bedrooms !== "4+" && stay.details.bedrooms !== parseInt(bedrooms)) {
-        return false;
+  const filteredStays = useMemo(() => {
+    return stays.filter(stay => {
+      // Apply bedroom filter - only if a specific option is selected
+      if (bedrooms !== "any") {
+        if (bedrooms === "4+" && stay.details.bedrooms < 4) {
+          return false;
+        } else if (bedrooms !== "4+" && stay.details.bedrooms !== parseInt(bedrooms)) {
+          return false;
+        }
       }
-    }
 
-    // Apply guest filter - only if a specific option is selected
-    if (guests !== "any") {
-      if (guests === "5+" && stay.details.maxGuests < 5) {
-        return false;
-      } else if (guests === "3-4" && (stay.details.maxGuests < 3 || stay.details.maxGuests > 4)) {
-        return false;
-      } else if (guests === "1-2" && (stay.details.maxGuests < 1 || stay.details.maxGuests > 2)) {
-        return false;
+      // Apply guest filter - only if a specific option is selected
+      if (guests !== "any") {
+        if (guests === "5+" && stay.details.maxGuests < 5) {
+          return false;
+        } else if (guests === "3-4" && (stay.details.maxGuests < 3 || stay.details.maxGuests > 4)) {
+          return false;
+        } else if (guests === "1-2" && (stay.details.maxGuests < 1 || stay.details.maxGuests > 2)) {
+          return false;
+        }
       }
-    }
 
-    // Apply availability filter based on selected option
-    if (availability !== "any" && stay.availability) {
-      const today = new Date();
-      const weekend = new Date(today);
-      weekend.setDate(today.getDate() + (6 - today.getDay()));
-      
-      const nextWeek = new Date(today);
-      nextWeek.setDate(today.getDate() + 7);
-      
-      const nextMonth = new Date(today);
-      nextMonth.setMonth(today.getMonth() + 1);
-      
-      let availabilityEndDate;
-      
-      switch(availability) {
-        case "weekend":
-          availabilityEndDate = weekend;
-          break;
-        case "week":
-          availabilityEndDate = nextWeek;
-          break;
-        case "month":
-          availabilityEndDate = nextMonth;
-          break;
-        case "flexible":
-          // For flexible, we'll check if there are at least 5 available days in the next month
-          let availableDaysCount = 0;
+      // Apply availability filter based on selected option
+      if (availability !== "any" && stay.availability) {
+        const today = new Date();
+        const weekend = new Date(today);
+        weekend.setDate(today.getDate() + (6 - today.getDay()));
+        
+        const nextWeek = new Date(today);
+        nextWeek.setDate(today.getDate() + 7);
+        
+        const nextMonth = new Date(today);
+        nextMonth.setMonth(today.getMonth() + 1);
+        
+        let availabilityEndDate;
+        
+        switch(availability) {
+          case "weekend":
+            availabilityEndDate = weekend;
+            break;
+          case "week":
+            availabilityEndDate = nextWeek;
+            break;
+          case "month":
+            availabilityEndDate = nextMonth;
+            break;
+          case "flexible":
+            // For flexible, we'll check if there are at least 5 available days in the next month
+            let availableDaysCount = 0;
+            const checkDate = new Date(today);
+            while (checkDate <= nextMonth) {
+              const formattedDate = format(checkDate, 'yyyy-MM-dd');
+              if (stay.availability?.find(a => a.date === formattedDate && a.is_available)) {
+                availableDaysCount++;
+                if (availableDaysCount >= 5) break;
+              }
+              checkDate.setDate(checkDate.getDate() + 1);
+            }
+            if (availableDaysCount < 5) return false;
+            break;
+        }
+        
+        // If specific date range is selected (not flexible)
+        if (availability !== "flexible" && availabilityEndDate) {
+          let hasAvailability = false;
           const checkDate = new Date(today);
-          while (checkDate <= nextMonth) {
+          
+          while (checkDate <= availabilityEndDate) {
             const formattedDate = format(checkDate, 'yyyy-MM-dd');
             if (stay.availability?.find(a => a.date === formattedDate && a.is_available)) {
-              availableDaysCount++;
-              if (availableDaysCount >= 5) break;
+              hasAvailability = true;
+              break;
             }
             checkDate.setDate(checkDate.getDate() + 1);
           }
-          if (availableDaysCount < 5) return false;
-          break;
+          
+          if (!hasAvailability) return false;
+        }
       }
-      
-      // If specific date range is selected (not flexible)
-      if (availability !== "flexible" && availabilityEndDate) {
-        let hasAvailability = false;
-        const checkDate = new Date(today);
+
+      // Apply date range filter ONLY if applyDateFilter is true
+      if (applyDateFilter && dateRange.from && dateRange.to && stay.availability) {
+        // Check if all dates in the range are available
+        let allDatesAvailable = true;
+        const currentDate = new Date(dateRange.from);
         
-        while (checkDate <= availabilityEndDate) {
-          const formattedDate = format(checkDate, 'yyyy-MM-dd');
-          if (stay.availability?.find(a => a.date === formattedDate && a.is_available)) {
-            hasAvailability = true;
+        while (currentDate <= dateRange.to) {
+          const formattedDate = format(currentDate, 'yyyy-MM-dd');
+          const availableDay = stay.availability?.find(a => a.date === formattedDate);
+          
+          if (!availableDay || !availableDay.is_available) {
+            allDatesAvailable = false;
             break;
           }
-          checkDate.setDate(checkDate.getDate() + 1);
+          currentDate.setDate(currentDate.getDate() + 1);
         }
         
-        if (!hasAvailability) return false;
-      }
-    }
-
-    // Apply date range filter ONLY if applyDateFilter is true
-    if (applyDateFilter && dateRange.from && dateRange.to && stay.availability) {
-      // Check if all dates in the range are available
-      let allDatesAvailable = true;
-      const currentDate = new Date(dateRange.from);
-      
-      while (currentDate <= dateRange.to) {
-        const formattedDate = format(currentDate, 'yyyy-MM-dd');
-        const availableDay = stay.availability?.find(a => a.date === formattedDate);
-        
-        if (!availableDay || !availableDay.is_available) {
-          allDatesAvailable = false;
-          break;
+        if (!allDatesAvailable) {
+          return false;
         }
-        currentDate.setDate(currentDate.getDate() + 1);
       }
-      
-      if (!allDatesAvailable) {
-        return false;
-      }
-    }
 
-    return true;
-  });
+      return true;
+    });
+  }, [stays, bedrooms, guests, availability, applyDateFilter, dateRange]);
 
-  // Debug: Log the filtered stays count
-  console.log('Filtered stays count after client filtering:', filteredStays.length);
+  // Debug: Log the filtered stays count - keep this but memoize the filtered stays
+  useEffect(() => {
+    console.log('Filtered stays count after client filtering:', filteredStays.length);
+  }, [filteredStays.length]);
 
-  const toggleFavorite = async (e: React.MouseEvent, stayId: string) => {
-    e.stopPropagation();
+  
     
-    if (user?.id) {
-      try {
-        // Call the service to toggle in database
-        const success = await stayService.toggleFavorite(stayId, user.id);
-        
-        if (success) {
-          // Update local state
-          setFavorites(prev => 
-            prev.includes(stayId) 
-              ? prev.filter(id => id !== stayId)
-              : [...prev, stayId]
-          );
-        }
-      } catch (error) {
-        console.error('Failed to toggle favorite:', error);
-      }
-    } else {
-      // If no user is logged in, just toggle in the UI 
-      // (this would typically prompt a login)
-      setFavorites(prev => 
-        prev.includes(stayId) 
-          ? prev.filter(id => id !== stayId)
-          : [...prev, stayId]
-      );
-    }
-  };
-
+    
   const handleTypeChange = (typeId: string) => {
     setSelectedTypes(prev =>
       prev.includes(typeId)
@@ -320,6 +290,75 @@ const Stays = () => {
     // Trigger apply button animation
     setApplyButtonAnimation(true);
     setTimeout(() => setApplyButtonAnimation(false), 500);
+  };
+
+  // Calculate map center based on filtered stays
+  const mapCenter = useMemo(() => {
+    // Filter stays that have coordinates
+    const staysWithCoordinates = filteredStays.filter(stay => stay.coordinates);
+    
+    if (staysWithCoordinates.length === 0) {
+      return { lat: 33.749, lng: -84.388 }; // Default to Atlanta if no stays have coordinates
+    }
+    
+    // Calculate average lat/lng
+    const totalLat = staysWithCoordinates.reduce((sum, stay) => sum + stay.coordinates!.lat, 0);
+    const totalLng = staysWithCoordinates.reduce((sum, stay) => sum + stay.coordinates!.lng, 0);
+    
+    return {
+      lat: totalLat / staysWithCoordinates.length,
+      lng: totalLng / staysWithCoordinates.length
+    };
+  }, [filteredStays]);
+
+  // Calculate map bounds and zoom level
+  const [mapBounds, setMapBounds] = useState<google.maps.LatLngBounds | null>(null);
+  const [mapZoom, setMapZoom] = useState(12);
+
+  // Calculate map bounds and zoom to show all markers
+  useEffect(() => {
+    if (isLoaded && filteredStays.length > 0) {
+      const bounds = new google.maps.LatLngBounds();
+      let markersCount = 0;
+      
+      filteredStays.forEach(stay => {
+        if (stay.coordinates) {
+          bounds.extend(new google.maps.LatLng(
+            stay.coordinates.lat,
+            stay.coordinates.lng
+          ));
+          markersCount++;
+        }
+      });
+      
+      // Only update bounds if we have at least one marker
+      if (markersCount > 0) {
+        setMapBounds(bounds);
+        
+        // Set zoom based on number of markers
+        if (markersCount === 1) {
+          setMapZoom(14); // Closer zoom for single marker
+        } else if (markersCount < 5) {
+          setMapZoom(12); // Medium zoom for few markers
+        } else {
+          setMapZoom(10); // Further zoom for many markers
+        }
+      }
+    }
+  }, [filteredStays, isLoaded]);
+
+  // Function to fit map to bounds when map loads
+  const onMapLoad = (map: google.maps.Map) => {
+    if (mapBounds) {
+      map.fitBounds(mapBounds);
+      
+      // Adjust zoom if too far or too close
+      const listener = google.maps.event.addListener(map, 'idle', () => {
+        if (map.getZoom() > 16) map.setZoom(16);
+        if (map.getZoom() < 7) map.setZoom(7);
+        google.maps.event.removeListener(listener);
+      });
+    }
   };
 
   return (
@@ -535,13 +574,10 @@ const Stays = () => {
           {showMap && isLoaded ? (
             <div className="h-[calc(100vh-200px)] rounded-lg overflow-hidden border">
               <GoogleMap
-                zoom={12}
-                center={
-                  stays.length > 0 && stays[0].details.location
-                    ? { lat: 33.749, lng: -84.388 } // Default to Atlanta
-                    : { lat: 33.749, lng: -84.388 }
-                }
+                zoom={mapZoom}
+                center={mapCenter}
                 mapContainerClassName="w-full h-full"
+                onLoad={onMapLoad}
                 options={{
                   styles: [
                     {
@@ -553,15 +589,17 @@ const Stays = () => {
                 }}
               >
                 {filteredStays.map((stay) => (
-                  <MarkerF
-                    key={stay.id}
-                    position={{ lat: 33.749 + Math.random() * 0.05, lng: -84.388 + Math.random() * 0.05 }}
-                    onClick={() => navigate(`/stays/${stay.id}`)}
-                    icon={{
-                      url: '/images/stay-marker.svg',
-                      scaledSize: new google.maps.Size(32, 32)
-                    }}
-                  />
+                  stay.coordinates && (
+                    <MarkerF
+                      key={stay.id}
+                      position={stay.coordinates}
+                      onClick={() => navigate(`/stays/${stay.id}`)}
+                      icon={{
+                        url: '/images/stay-marker.svg',
+                        scaledSize: new google.maps.Size(32, 32)
+                      }}
+                    />
+                  )
                 ))}
               </GoogleMap>
             </div>
@@ -589,25 +627,7 @@ const Stays = () => {
                             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                           />
                         </div>
-                        <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="absolute top-2 right-2 bg-white/80 hover:bg-white rounded-full"
-                                onClick={(e) => toggleFavorite(e, stay.id)}
-                              >
-                                <Heart 
-                                  className={`h-5 w-5 ${favorites.includes(stay.id) ? 'fill-red-500 text-red-500' : ''}`} 
-                                />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                              <p>{favorites.includes(stay.id) ? 'Remove from favorites' : 'Add to favorites'}</p>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
+                        
                         <Badge 
                           className="absolute bottom-2 left-2 bg-white/90 text-black hover:bg-white/90"
                         >

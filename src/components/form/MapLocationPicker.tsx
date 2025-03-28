@@ -8,6 +8,9 @@ import { useDebounce } from '@/hooks/useDebounce';
 // Define libraries array as a static constant outside the component
 const mapLibraries = ['places'] as ["places"];
 
+// Create a centralized Google Maps API key
+const GOOGLE_MAPS_API_KEY = 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE';
+
 // Create a dummy div once for PlacesService
 const dummyMapElement = typeof document !== 'undefined' ? document.createElement('div') : null;
 
@@ -45,8 +48,10 @@ export const MapLocationPicker = ({ value, onChange, error }: MapLocationPickerP
   const placesService = useRef<google.maps.places.PlacesService | null>(null);
 
   const { isLoaded } = useLoadScript({
-    googleMapsApiKey: 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE',
-    libraries: mapLibraries
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    libraries: mapLibraries,
+    // Add a unique ID to ensure only one instance loads
+    id: 'google-map-script'
   });
 
   const debouncedSearchInput = useDebounce(searchInput, 300);

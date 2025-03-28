@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import React, { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -132,118 +132,125 @@ const HostStay = () => {
     return `${import.meta.env.VITE_API_URL}/${url}`;
   };
 
-  useEffect(() => {
-    if (id) {
-      const fetchStay = async () => {
-        try {
-          setLoading(true);
+  // Separate fetchStay function that can be called when needed
+  const fetchStay = useCallback(async () => {
+    if (!id || id === 'new') return;
+    
+    try {
+      setLoading(true);
 
-          if (id === 'new') {
-            setLoading(false);
-            return;
-          }
+      const { data: stayData, error } = await supabase
+        .from('stays')
+        .select(`
+          *,
+          images:stay_images(id, image_path, is_primary, display_order)
+        `)
+        .eq('id', id)
+        .single();
 
-          const { data: stayData, error } = await supabase
-            .from('stays')
-            .select(`
-              *,
-              images:stay_images(id, image_path, is_primary, display_order)
-            `)
-            .eq('id', id)
-            .single();
+      if (error) {
+        throw error;
+      }
+      
+      // Process the images URLs
+      const processedImages = stayData.images.map((img: any) => 
+        getFullImageUrl(img.image_path)
+      );
+      
+      // Fetch any availability data
+      const { data: availabilityData, error: availabilityError } = await supabase
+        .from('stay_availability')
+        .select('*')
+        .eq('stay_id', id);
 
-          if (error) {
-            throw error;
-          }
+      if (availabilityError) {
+        console.error('Error fetching availability:', availabilityError);
+      }
+
+      const availability = availabilityData || [];
+      
+      // Ensure amenities is an array
+      const stayAmenities = Array.isArray(stayData.amenities) ? stayData.amenities : [];
+      
+      // If this stay has amenities, we need to fetch the full amenity details
+      if (stayAmenities.length > 0) {
+        // Query the amenities table for the selected amenities
+        const { data: amenityData } = await supabase
+          .from('amenities')
+          .select('*')
+          .in('id', stayAmenities);
           
-          // Process the images URLs
-          const processedImages = stayData.images.map((img: any) => 
-            getFullImageUrl(img.image_path)
-          );
-          setImages(processedImages);
-          
-          // Fetch any availability data
-          const { data: availabilityData, error: availabilityError } = await supabase
-            .from('stay_availability')
-            .select('*')
-            .eq('stay_id', id);
-
-          if (availabilityError) {
-            console.error('Error fetching availability:', availabilityError);
-          }
-
-          const availability = availabilityData || [];
-          
-          // Ensure amenities is an array
-          const stayAmenities = Array.isArray(stayData.amenities) ? stayData.amenities : [];
-          
-          // If this stay has amenities, we need to fetch the full amenity details
-          if (stayAmenities.length > 0) {
-            // Query the amenities table for the selected amenities
-            const { data: amenityData } = await supabase
-              .from('amenities')
-              .select('*')
-              .in('id', stayAmenities);
-              
-            if (amenityData && amenityData.length > 0) {
-              setSelectedAmenities(amenityData);
-            }
-          }
-          
-          form.reset({
-            title: stayData.title,
-            description: stayData.description,
-            location_name: stayData.location_name || stayData.location,
-            price_per_night: parseFloat(stayData.price_per_night),
-            max_guests: parseInt(stayData.max_guests),
-            bedrooms: parseInt(stayData.bedrooms),
-            beds: parseInt(stayData.beds) || parseInt(stayData.bedrooms),
-            bathrooms: parseInt(stayData.bathrooms) || 1,
-            images: processedImages,
-            status: stayData.status,
-            amenities: stayAmenities.map((a: any) => 
-              typeof a === 'object' ? a.id.toString() : a.toString()
-            ),
-            availability: availability.map((item: any) => ({
-              date: item.date,
-              is_available: item.is_available,
-              price_override: item.price
-            })),
-            address: stayData.address,
-            zipcode: stayData.zipcode,
-            city: stayData.city,
-            state: stayData.state,
-            latitude: parseFloat(stayData.latitude),
-            longitude: parseFloat(stayData.longitude),
-            property_type: stayData.property_type || 'house'
-          });
-
-          // Update location state
-          setLocation({
-            address: stayData.address,
-            zipcode: stayData.zipcode,
-            city: stayData.city,
-            state: stayData.state,
-            latitude: parseFloat(stayData.latitude),
-            longitude: parseFloat(stayData.longitude),
-            displayLocation: stayData.location_name || stayData.location
-          });
-        } catch (error) {
-          console.error('Error:', error);
-          toast({
-            title: "Error",
-            description: "Failed to fetch stay",
-            variant: "destructive",
-          });
-        } finally {
-          setLoading(false);
+        if (amenityData && amenityData.length > 0) {
+          setSelectedAmenities(amenityData);
         }
+      }
+      
+      // Prepare the location object
+      const locationData = {
+        address: stayData.address,
+        zipcode: stayData.zipcode,
+        city: stayData.city,
+        state: stayData.state,
+        latitude: parseFloat(stayData.latitude),
+        longitude: parseFloat(stayData.longitude),
+        displayLocation: stayData.location_name || stayData.location
       };
-
-      fetchStay();
+      
+      // Update state in a single batch
+      setImages(processedImages);
+      setLocation(locationData);
+      
+      // Use form.reset instead of multiple setValue calls
+      form.reset({
+        title: stayData.title,
+        description: stayData.description,
+        location_name: stayData.location_name || stayData.location,
+        price_per_night: parseFloat(stayData.price_per_night),
+        max_guests: parseInt(stayData.max_guests),
+        bedrooms: parseInt(stayData.bedrooms),
+        beds: parseInt(stayData.beds) || parseInt(stayData.bedrooms),
+        bathrooms: parseInt(stayData.bathrooms) || 1,
+        images: processedImages,
+        status: stayData.status,
+        amenities: stayAmenities.map((a: any) => 
+          typeof a === 'object' ? a.id.toString() : a.toString()
+        ),
+        availability: availability.map((item: any) => ({
+          date: item.date,
+          is_available: item.is_available,
+          price_override: item.price
+        })),
+        address: stayData.address,
+        zipcode: stayData.zipcode,
+        city: stayData.city,
+        state: stayData.state,
+        latitude: parseFloat(stayData.latitude),
+        longitude: parseFloat(stayData.longitude),
+        property_type: stayData.property_type || 'house'
+      });
+    } catch (error) {
+      console.error('Error:', error);
+      toast({
+        title: "Error",
+        description: "Failed to fetch stay",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
     }
-  }, [id, form, getAuthHeader]);
+  }, [id]); // Removed dependencies that cause re-renders
 
+  // Call fetchStay only once when the component mounts or id changes
+  // Using a ref to prevent multiple fetches
+  const initialFetchDone = React.useRef(false);
+  useEffect(() => {
+    if (id && id !== 'new' && !initialFetchDone.current) {
+      fetchStay();
+      initialFetchDone.current = true;
+    }
+  }, [id, fetchStay]);
+
+  // Fetch amenities only once when component mounts
   useEffect(() => {
     const fetchAmenities = async () => {
       try {
@@ -257,9 +264,6 @@ const HostStay = () => {
         
         // Store all available amenities
         setSelectedAmenities(data);
-        
-        // If editing a stay and it has amenities, we'll update the selected ones
-        // in the fetchStay function
       } catch (error) {
         console.error('Error fetching amenities:', error);
         setSelectedAmenities([]);
@@ -269,33 +273,39 @@ const HostStay = () => {
     fetchAmenities();
   }, []);
 
-  useEffect(() => {
-    if (location.address) {
-      form.setValue('address', location.address);
-      form.setValue('zipcode', location.zipcode);
-      form.setValue('city', location.city);
-      form.setValue('state', location.state);
-      form.setValue('latitude', location.latitude);
-      form.setValue('longitude', location.longitude);
-      form.setValue('location_name', location.displayLocation);
+  // Only update location values when explicitly setting location, not on every render
+  const updateFormLocation = useCallback((newLocation: typeof location) => {
+    if (newLocation.address) {
+      form.setValue('address', newLocation.address);
+      form.setValue('zipcode', newLocation.zipcode);
+      form.setValue('city', newLocation.city);
+      form.setValue('state', newLocation.state);
+      form.setValue('latitude', newLocation.latitude);
+      form.setValue('longitude', newLocation.longitude);
+      form.setValue('location_name', newLocation.displayLocation);
     }
-  }, [location, form]);
+  }, [form]);
 
   // Memoize handlers for child components to prevent unnecessary re-renders
   const handleAmenitiesChange = useCallback((amenities) => {
     setSelectedAmenities(amenities);
+    // Only update form value when explicitly changing amenities
     form.setValue('amenities', amenities.map(a => a.id));
   }, [form]);
 
   const handleLocationChange = useCallback((newLocation) => {
     console.log('Location selected:', newLocation);
-    setLocation({
+    const updatedLocation = {
       ...newLocation,
       displayLocation: newLocation.displayLocation || `${newLocation.city}, ${newLocation.state}`
-    });
-    form.setValue('location_name', newLocation.displayLocation || `${newLocation.city}, ${newLocation.state}`);
-  }, [form]);
+    };
+    setLocation(updatedLocation);
+    
+    // Use the dedicated function to update location-related form fields
+    updateFormLocation(updatedLocation);
+  }, [updateFormLocation]);
 
+  // Simplified image upload handler with better state management
   const handleImageUpload = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0 || uploading) return;
     
@@ -338,17 +348,18 @@ const HostStay = () => {
       return;
     }
     
-    setLoading(true);
     try {
       // Get the current images from the form
       const currentImages = form.getValues('images') || [];
       
       if (id && id !== 'new') {
         // We're editing an existing stay
+        setLoading(true);
         let successCount = 0;
         
         for (let i = 0; i < validFiles.length; i++) {
           const file = validFiles[i];
+          // Set as primary if it's the first image AND there are no current images
           const isPrimary = currentImages.length === 0 && i === 0;
           
           try {
@@ -370,9 +381,12 @@ const HostStay = () => {
           }
         }
         
-        // Update form with successfully uploaded images
+        // Update form with successfully uploaded images in a single operation
         if (successCount > 0) {
+          // Update state and form in a single batch
+          setImages(currentImages);
           form.setValue('images', currentImages);
+          
           toast({
             title: "Success",
             description: successCount === validFiles.length 
@@ -386,6 +400,7 @@ const HostStay = () => {
             variant: "destructive",
           });
         }
+        setLoading(false);
       } else {
         // For new stays, convert files to base64 for later upload
         try {
@@ -404,7 +419,10 @@ const HostStay = () => {
             })
           );
           
-          form.setValue('images', [...currentImages, ...base64Images]);
+          // Update in a single batch operation
+          const updatedImages = [...currentImages, ...base64Images];
+          setImages(updatedImages);
+          form.setValue('images', updatedImages);
           
           toast({
             title: "Success",
@@ -427,7 +445,6 @@ const HostStay = () => {
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
       setUploading(false);
       
       // Clear the file input to allow re-selection of the same file

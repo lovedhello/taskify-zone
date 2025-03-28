@@ -6,7 +6,9 @@ import {
   Dialog,
   DialogContent,
   DialogTrigger,
+  DialogTitle,
 } from "@/components/ui/dialog";
+import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 
 export const NavbarSearch = () => {
   const [open, setOpen] = useState(false);
@@ -23,6 +25,9 @@ export const NavbarSearch = () => {
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[600px]">
+        <DialogTitle asChild>
+          <VisuallyHidden>Search Locations</VisuallyHidden>
+        </DialogTitle>
         <LocationSearch onLocationSelect={() => setOpen(false)} />
       </DialogContent>
     </Dialog>

@@ -40,6 +40,12 @@ import { getFoodExperienceById, isFoodExperienceFavorited, toggleFoodExperienceF
 import { getAverageRating, getReviewCount } from "@/services/reviewService";
 import type { FoodExperience } from "@/types/food";
 
+// Define libraries as a constant to prevent reloading
+const libraries = ['places'] as const;
+
+// Create a centralized Google Maps API key
+const GOOGLE_MAPS_API_KEY = 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE';
+
 const FoodDetails = () => {
   const { id } = useParams();
   const [experience, setExperience] = useState<FoodExperience | null>(null);
@@ -52,8 +58,9 @@ const FoodDetails = () => {
   const [reviewCount, setReviewCount] = useState(0);
   
   const { isLoaded } = useLoadScript({
-    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || '',
-    libraries: ['places'],
+    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
+    libraries,
+    id: 'google-map-script',
     onError: () => {
       console.warn('Google Maps API failed to load. Using fallback location display.');
     }

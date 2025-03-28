@@ -45,7 +45,9 @@ interface UserProfile {
 }
 
 interface StayImage {
-  url: string;
+  id?: string;
+  image_path: string;
+  is_primary?: boolean;
   display_order?: number;
 }
 
@@ -64,42 +66,47 @@ interface StayFromDB {
   beds: number;
   bathrooms: number;
   max_guests: number;
-  amenities: string[];
-  location: string;
+  amenities: string[] | string | null;
+  location_name: string;
   zipcode?: string;
   latitude?: number;
   longitude?: number;
-  user_profiles: UserProfile;
+  host_id: string;
+  profiles: UserProfile[];
   stay_images: StayImage[];
   stay_reviews: StayReview[];
+  stay_amenities?: { id: string; amenity_id: string; }[];
 }
 
 // Helper function to get full image URL
 const getFullImageUrl = (url: string) => {
   if (!url) return `/images/placeholder-stay.jpg`;
   if (url.startsWith('http')) return url;
+  // Handle Supabase storage URLs
+  if (url.startsWith('stay-images/')) {
+    return `https://bbrgntyiwuniovyoryta.supabase.co/storage/v1/object/public/${url}`;
+  }
   return `${import.meta.env.VITE_BACKEND_URL || ''}${url}`;
 };
 
-// Helper function to generate mock availability for the next 30 days
-const generateMockAvailability = (basePrice: number) => {
+// Helper function to generate availability for the next 30 days
+// This will be replaced with real availability data when available
+const generateAvailability = (basePrice: number) => {
   const availability = [];
   const startDate = new Date();
   
   for (let i = 0; i < 30; i++) {
     const date = addDays(startDate, i);
     const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-    const isAvailable = Math.random() > 0.3; // 70% chance of being available
     
-    // Price variation for weekends or randomly
+    // Price variation for weekends
     let price = basePrice;
     if (isWeekend) price += Math.round(basePrice * 0.25); // 25% more on weekends
-    if (Math.random() > 0.8) price += Math.round(basePrice * 0.15); // Occasional 15% price bump
     
     availability.push({
       date: format(date, 'yyyy-MM-dd'),
       price,
-      is_available: isAvailable
+      is_available: true
     });
   }
   
@@ -295,14 +302,15 @@ export const stayService = {
           bathrooms,
           max_guests,
           amenities,
-          location,
+          location_name,
           zipcode,
           latitude,
           longitude,
           host_id,
-          user_profiles:user_profiles(id, name, avatar_url),
+          profiles:profiles(id, name, avatar_url),
           stay_images:stay_images(id, image_path, is_primary, display_order),
-          stay_reviews:stay_reviews(rating)
+          stay_reviews:stay_reviews(rating),
+          stay_amenities:stay_amenities(amenity_id, amenities:amenities(id, name))
         `)
         .eq('status', 'published');
       
@@ -312,11 +320,11 @@ export const stayService = {
       }
       
       if (options.location) {
-        query = query.ilike('location', `%${options.location}%`);
+        query = query.ilike('location_name', `%${options.location}%`);
       }
       
       if (options.search) {
-        query = query.or(`title.ilike.%${options.search}%,description.ilike.%${options.search}%,location.ilike.%${options.search}%`);
+        query = query.or(`title.ilike.%${options.search}%,description.ilike.%${options.search}%,location_name.ilike.%${options.search}%`);
       }
       
       if (options.propertyType && options.propertyType.length > 0) {
@@ -349,21 +357,12 @@ export const stayService = {
       
       if (error) {
         console.error('Error fetching stays:', error);
-        console.log('Falling back to mock data');
-        
-        // Return mock data for development until database is set up
-        return mockStays.map(stay => ({
-          ...stay,
-          availability: generateMockAvailability(stay.price_per_night)
-        }));
+        throw new Error('Failed to fetch stays');
       }
       
       if (!data || data.length === 0) {
-        console.log('No stays found in database, returning mock data');
-        return mockStays.map(stay => ({
-          ...stay,
-          availability: generateMockAvailability(stay.price_per_night)
-        }));
+        console.log('No stays found in database');
+        return [];
       }
       
       console.log('Raw stays data from DB:', data);
@@ -371,8 +370,8 @@ export const stayService = {
       // Transform data to match our interface
       const transformedData = data.map(stayData => {
         // Parse the nested objects - they come as arrays but we need the first item
-        const userProfile = Array.isArray(stayData.user_profiles) && stayData.user_profiles.length > 0 
-          ? stayData.user_profiles[0] 
+        const userProfile = Array.isArray(stayData.profiles) && stayData.profiles.length > 0 
+          ? stayData.profiles[0] 
           : { name: 'Host', avatar_url: '' };
         
         const stayImages = Array.isArray(stayData.stay_images) ? stayData.stay_images : [];
@@ -386,21 +385,54 @@ export const stayService = {
         // Find primary image or use the first one
         const primaryImage = stayImages.find(img => img.is_primary) || stayImages[0];
         
+        // Parse amenities - handle cases where it might be a string, array, or null
+        let amenitiesArray: string[] = [];
+        if (stayData.amenities) {
+          if (Array.isArray(stayData.amenities)) {
+            amenitiesArray = stayData.amenities;
+          } else if (typeof stayData.amenities === 'string') {
+            try {
+              // Try parsing if it's a JSON string
+              const parsed = JSON.parse(stayData.amenities);
+              amenitiesArray = Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+              // If not valid JSON, split by comma if it's a comma-separated string
+              amenitiesArray = stayData.amenities.split(',').map(item => item.trim());
+            }
+          }
+        }
+        
+        // Default amenities if none are provided
+        if (amenitiesArray.length === 0) {
+          amenitiesArray = ['Wi-Fi', 'Kitchen'];
+        }
+        
+        // Process the images
+        const processedImages = stayImages
+          .map(img => ({
+            url: getFullImageUrl(img.image_path),
+            order: img.display_order || 0
+          }))
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
+        
+        // If no images are found, add a placeholder
+        if (processedImages.length === 0) {
+          processedImages.push({
+            url: '/images/mountain.jpg',
+            order: 0
+          });
+        }
+        
         return {
           id: stayData.id,
           title: stayData.title,
           description: stayData.description,
           price_per_night: stayData.price_per_night,
           status: stayData.status,
-          images: stayImages
-            .map(img => ({
-              url: getFullImageUrl(img.image_path),
-              order: img.display_order || 0
-            }))
-            .sort((a, b) => (a.order || 0) - (b.order || 0)),
+          images: processedImages,
           image: stayImages.length > 0 
             ? getFullImageUrl(primaryImage?.image_path || '') 
-            : getFullImageUrl(''),
+            : processedImages[0].url,
           host: {
             name: userProfile.name || 'Host',
             image: getFullImageUrl(userProfile.avatar_url || ''),
@@ -412,16 +444,16 @@ export const stayService = {
             beds: stayData.beds || 1,
             bathrooms: stayData.bathrooms || 1,
             maxGuests: stayData.max_guests || 2,
-            amenities: stayData.amenities || ['Wi-Fi', 'Kitchen'],
-            location: stayData.location || 'Unknown location',
+            amenities: amenitiesArray,
+            location: stayData.location_name || 'Unknown location',
             propertyType: stayData.property_type || 'apartment'
           },
           coordinates: {
             lat: stayData.latitude || 0,
             lng: stayData.longitude || 0
           },
-          // Generate mock availability for now
-          availability: generateMockAvailability(stayData.price_per_night)
+          // Generate availability for now - will be replaced with real data later
+          availability: generateAvailability(stayData.price_per_night)
         };
       });
       
@@ -429,11 +461,7 @@ export const stayService = {
       return transformedData;
     } catch (error) {
       console.error('Error in getStays:', error);
-      // Return mock data as fallback
-      return mockStays.map(stay => ({
-        ...stay,
-        availability: generateMockAvailability(stay.price_per_night)
-      }));
+      throw error;
     }
   },
   
@@ -457,30 +485,22 @@ export const stayService = {
           bathrooms,
           max_guests,
           amenities,
-          location,
+          location_name,
           zipcode,
           latitude,
           longitude,
           host_id,
-          user_profiles:user_profiles(id, name, avatar_url),
-          stay_images:stay_images(url, display_order),
-          stay_reviews:stay_reviews(id, rating, comment, user_id, created_at)
+          profiles:profiles(id, name, avatar_url),
+          stay_images:stay_images(id, image_path, is_primary, display_order),
+          stay_reviews:stay_reviews(id, rating, comment, user_id, created_at),
+          stay_amenities:stay_amenities(amenity_id, amenities:amenities(id, name))
         `)
         .eq('id', id)
         .single();
       
       if (error) {
         console.error('Error fetching stay:', error);
-        console.log('Falling back to mock data');
-        
-        // Return mock data for development
-        const mockStay = mockStays.find(stay => stay.id === id);
-        if (!mockStay) return null;
-        
-        return {
-          ...mockStay,
-          availability: generateMockAvailability(mockStay.price_per_night)
-        };
+        throw new Error(`Failed to fetch stay with ID: ${id}`);
       }
       
       if (!data) {
@@ -489,8 +509,8 @@ export const stayService = {
       }
       
       // Parse the nested objects - they come as arrays but we need the first item
-      const userProfile = Array.isArray(data.user_profiles) && data.user_profiles.length > 0 
-        ? data.user_profiles[0] 
+      const userProfile = Array.isArray(data.profiles) && data.profiles.length > 0 
+        ? data.profiles[0] 
         : { name: 'Host', avatar_url: '' };
       
       const stayImages = Array.isArray(data.stay_images) ? data.stay_images : [];
@@ -499,7 +519,46 @@ export const stayService = {
       // Calculate average rating from reviews
       const averageRating = stayReviews.length > 0
         ? stayReviews.reduce((sum, review: any) => sum + review.rating, 0) / stayReviews.length
-        : 4.7; // Default rating
+        : 4.7;
+      
+      // Find primary image or use the first one
+      const primaryImage = stayImages.find(img => img.is_primary) || stayImages[0];
+      
+      // Check if we have amenities from the stay_amenities relationship
+      const stayAmenities = Array.isArray(data.stay_amenities) ? data.stay_amenities : [];
+      
+      // Extract amenity names from the nested join
+      let amenitiesArray: string[] = [];
+      if (stayAmenities && stayAmenities.length > 0) {
+        // Extract amenity names from the nested join
+        amenitiesArray = stayAmenities
+          .filter(item => item.amenities && item.amenities.name) // Only include valid entries
+          .map(item => item.amenities.name);
+      }
+      
+      // Default amenities if none are provided
+      if (amenitiesArray.length === 0) {
+        amenitiesArray = ['Wi-Fi', 'Kitchen'];
+      }
+      
+      // Log the stay images to help with debugging
+      console.log('Stay images found:', stayImages);
+      
+      // Process the images
+      const processedImages = stayImages
+        .map(img => ({
+          url: getFullImageUrl(img.image_path),
+          order: img.display_order || 0
+        }))
+        .sort((a, b) => (a.order || 0) - (b.order || 0));
+      
+      // If no images are found, add a placeholder
+      if (processedImages.length === 0) {
+        processedImages.push({
+          url: '/images/mountain.jpg',
+          order: 0
+        });
+      }
       
       // Transform data to match our interface
       const transformedData = {
@@ -508,15 +567,10 @@ export const stayService = {
         description: data.description,
         price_per_night: data.price_per_night,
         status: data.status,
-        images: stayImages
-          .map(img => ({
-            url: getFullImageUrl(img.url),
-            order: img.display_order || 0
-          }))
-          .sort((a, b) => (a.order || 0) - (b.order || 0)),
+        images: processedImages,
         image: stayImages.length > 0 
-          ? getFullImageUrl(stayImages[0].url) 
-          : getFullImageUrl(''),
+          ? getFullImageUrl(primaryImage?.image_path || '') 
+          : processedImages[0].url,
         host: {
           name: userProfile.name || 'Host',
           image: getFullImageUrl(userProfile.avatar_url || ''),
@@ -528,31 +582,23 @@ export const stayService = {
           beds: data.beds || 1,
           bathrooms: data.bathrooms || 1,
           maxGuests: data.max_guests || 2,
-          amenities: data.amenities || ['Wi-Fi', 'Kitchen'],
-          location: data.location || 'Unknown location',
+          amenities: amenitiesArray,
+          location: data.location_name || 'Unknown location',
           propertyType: data.property_type || 'apartment'
         },
         coordinates: {
           lat: data.latitude || 0,
           lng: data.longitude || 0
         },
-        // Generate mock availability for now
-        availability: generateMockAvailability(data.price_per_night)
+        // Generate availability for now - will be replaced with real data later
+        availability: generateAvailability(data.price_per_night)
       };
       
       console.log(`Successfully fetched stay with ID: ${id}`);
       return transformedData;
     } catch (error) {
       console.error('Error in getStayById:', error);
-      
-      // Return mock data as fallback
-      const mockStay = mockStays.find(stay => stay.id === id);
-      if (!mockStay) return null;
-      
-      return {
-        ...mockStay,
-        availability: generateMockAvailability(mockStay.price_per_night)
-      };
+      throw error;
     }
   },
   
@@ -574,11 +620,12 @@ export const stayService = {
           beds,
           bathrooms,
           max_guests,
-          location,
+          location_name,
           host_id,
-          user_profiles:user_profiles(name, avatar_url),
-          stay_images:stay_images(url, display_order),
-          stay_reviews:stay_reviews(rating)
+          profiles:profiles(name, avatar_url),
+          stay_images:stay_images(id, image_path, is_primary, display_order),
+          stay_reviews:stay_reviews(rating),
+          stay_amenities:stay_amenities(amenity_id, amenities:amenities(id, name))
         `)
         .eq('is_featured', true)
         .eq('status', 'published')
@@ -586,22 +633,19 @@ export const stayService = {
       
       if (error) {
         console.error('Error fetching featured stays:', error);
-        console.log('Falling back to mock data');
-        
-        // Return a subset of mock data
-        return mockStays.slice(0, limit);
+        throw new Error('Failed to fetch featured stays');
       }
       
       if (!data || data.length === 0) {
-        console.log('No featured stays found, returning mock data');
-        return mockStays.slice(0, limit);
+        console.log('No featured stays found');
+        return [];
       }
       
       // Transform data to match our interface
       return data.map(stayData => {
         // Parse the nested objects
-        const userProfile = Array.isArray(stayData.user_profiles) && stayData.user_profiles.length > 0 
-          ? stayData.user_profiles[0] 
+        const userProfile = Array.isArray(stayData.profiles) && stayData.profiles.length > 0 
+          ? stayData.profiles[0] 
           : { name: 'Host', avatar_url: '' };
         
         const stayImages = Array.isArray(stayData.stay_images) ? stayData.stay_images : [];
@@ -610,21 +654,58 @@ export const stayService = {
         // Calculate average rating from reviews
         const averageRating = stayReviews.length > 0
           ? stayReviews.reduce((sum, review: any) => sum + review.rating, 0) / stayReviews.length
-          : 4.7; // Default rating
+          : 4.7;
+        
+        // Find primary image or use the first one
+        const primaryImage = stayImages.find(img => img.is_primary) || stayImages[0];
+        
+        // Parse amenities - handle cases where it might be a string, array, or null
+        let amenitiesArray: string[] = [];
+        if (stayData.amenities) {
+          if (Array.isArray(stayData.amenities)) {
+            amenitiesArray = stayData.amenities;
+          } else if (typeof stayData.amenities === 'string') {
+            try {
+              // Try parsing if it's a JSON string
+              const parsed = JSON.parse(stayData.amenities);
+              amenitiesArray = Array.isArray(parsed) ? parsed : [];
+            } catch (e) {
+              // If not valid JSON, split by comma if it's a comma-separated string
+              amenitiesArray = stayData.amenities.split(',').map(item => item.trim());
+            }
+          }
+        }
+        
+        // Default amenities if none are provided
+        if (amenitiesArray.length === 0) {
+          amenitiesArray = ['Wi-Fi', 'Kitchen'];
+        }
+        
+        // Process the image URLs into our desired format
+        const processedImages = stayImages
+          .map(img => ({
+            url: getFullImageUrl(img.image_path),
+            order: img.display_order || 0
+          }))
+          .sort((a, b) => (a.order || 0) - (b.order || 0));
+          
+        // If no images are found, add a placeholder image
+        if (processedImages.length === 0) {
+          processedImages.push({
+            url: '/images/mountain.jpg',
+            order: 0
+          });
+        }
         
         return {
           id: stayData.id,
           title: stayData.title,
           description: stayData.description,
           price_per_night: stayData.price_per_night,
-          images: stayImages
-            .map(img => ({
-              url: getFullImageUrl(img.url),
-              order: img.display_order || 0
-            })),
+          images: processedImages,
           image: stayImages.length > 0 
-            ? getFullImageUrl(stayImages[0].url) 
-            : getFullImageUrl(''),
+            ? getFullImageUrl(primaryImage?.image_path || '') 
+            : processedImages[0].url,
           host: {
             name: userProfile.name || 'Host',
             image: getFullImageUrl(userProfile.avatar_url || ''),
@@ -636,16 +717,16 @@ export const stayService = {
             beds: stayData.beds || 1,
             bathrooms: stayData.bathrooms || 1,
             maxGuests: stayData.max_guests || 2,
-            amenities: ['Wi-Fi', 'Kitchen'], // Default amenities
-            location: stayData.location || 'Unknown location',
+            amenities: amenitiesArray,
+            location: stayData.location_name || 'Unknown location',
             propertyType: stayData.property_type || 'apartment'
-          }
+          },
+          availability: generateAvailability(stayData.price_per_night)
         };
       });
     } catch (error) {
       console.error('Error in getFeaturedStays:', error);
-      // Return mock data as fallback
-      return mockStays.slice(0, limit);
+      throw error;
     }
   },
   

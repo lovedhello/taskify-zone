@@ -745,6 +745,24 @@ export async function createStay(stayData) {
     throw error;
   }
 
+  // Insert amenities into the stay_amenities junction table
+  if (data && stayData.amenities && stayData.amenities.length > 0) {
+    const amenityRecords = stayData.amenities.map(amenityId => ({
+      stay_id: data.id,
+      amenity_id: amenityId,
+      created_at: new Date().toISOString()
+    }));
+
+    const { error: amenitiesError } = await supabase
+      .from('stay_amenities')
+      .insert(amenityRecords);
+
+    if (amenitiesError) {
+      console.error('Error creating amenity records:', amenitiesError);
+      // Continue even if amenity records fail
+    }
+  }
+
   // Handle availability if provided
   if (stayData.availability && stayData.availability.length > 0) {
     const availabilityRecords = stayData.availability.map(item => ({
@@ -824,6 +842,38 @@ export async function updateStay(id, stayData) {
   if (error) {
     console.error('Error updating stay:', error);
     throw error;
+  }
+
+  // Update amenities in the stay_amenities junction table
+  if (stayData.amenities) {
+    // First, delete existing amenity associations
+    const { error: deleteError } = await supabase
+      .from('stay_amenities')
+      .delete()
+      .eq('stay_id', id);
+
+    if (deleteError) {
+      console.error('Error deleting existing amenity records:', deleteError);
+      // Continue even if delete fails
+    }
+
+    // Then insert new ones if there are any amenities selected
+    if (stayData.amenities.length > 0) {
+      const amenityRecords = stayData.amenities.map(amenityId => ({
+        stay_id: id,
+        amenity_id: amenityId,
+        created_at: new Date().toISOString()
+      }));
+
+      const { error: insertError } = await supabase
+        .from('stay_amenities')
+        .insert(amenityRecords);
+
+      if (insertError) {
+        console.error('Error creating amenity records:', insertError);
+        // Continue even if insert fails
+      }
+    }
   }
 
   return data;
@@ -989,37 +1039,17 @@ export async function uploadStayImage(
     const fileExt = file.name.split('.').pop();
     const fileName = `${stayId}-${Date.now()}.${fileExt}`;
     
-    // Check if bucket exists, create or update it if needed
-    const { data: buckets } = await supabase.storage.listBuckets();
-    const bucketExists = buckets?.some(bucket => bucket.name === 'stay-images');
+    // Note: Bucket should already exist in Supabase and have proper RLS policies
+    // We don't need to create or update buckets from the client side as this requires admin privileges
+    // Bucket management should be done through Supabase dashboard or migrations
     
-    if (!bucketExists) {
-      // Create the bucket if it doesn't exist
-      const { error: bucketError } = await supabase.storage.createBucket('stay-images', {
-        public: true,
-        fileSizeLimit: 10485760, // 10MB
-      });
-      
-      if (bucketError) {
-        console.error('Error creating bucket:', bucketError);
-      }
-    } else {
-      // Update bucket to be public
-      const { error: updateError } = await supabase.storage.updateBucket('stay-images', {
-        public: true
-      });
-      
-      if (updateError) {
-        console.error('Error updating bucket:', updateError);
-      }
-    }
-    
-    // Upload the file to Supabase Storage
+    // Upload the file to Supabase Storage with proper auth
     const { error: uploadError } = await supabase.storage
       .from('stay-images')
       .upload(fileName, file, {
         cacheControl: '3600',
-        upsert: true // Use upsert to avoid conflicts
+        upsert: true, // Use upsert to avoid conflicts
+        contentType: file.type // Explicitly set content type
       });
 
     if (uploadError) {
