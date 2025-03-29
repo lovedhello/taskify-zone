@@ -307,7 +307,7 @@ export const stayService = {
           latitude,
           longitude,
           host_id,
-          profiles:profiles(id, name, avatar_url),
+          host:profiles!host_id(id, name, avatar_url),
           stay_images:stay_images(id, image_path, is_primary, display_order),
           stay_reviews:stay_reviews(rating),
           stay_amenities:stay_amenities(amenity_id, amenities:amenities(id, name))
@@ -369,10 +369,9 @@ export const stayService = {
       
       // Transform data to match our interface
       const transformedData = data.map(stayData => {
-        // Parse the nested objects - they come as arrays but we need the first item
-        const userProfile = Array.isArray(stayData.profiles) && stayData.profiles.length > 0 
-          ? stayData.profiles[0] 
-          : { name: 'Host', avatar_url: '' };
+        // Get the host profile data - using type assertion to help TypeScript
+        const hostProfile = stayData.host as UserProfile;
+        const userProfile = hostProfile || { name: 'Host', avatar_url: '' };
         
         const stayImages = Array.isArray(stayData.stay_images) ? stayData.stay_images : [];
         const stayReviews = Array.isArray(stayData.stay_reviews) ? stayData.stay_reviews : [];
@@ -490,7 +489,7 @@ export const stayService = {
           latitude,
           longitude,
           host_id,
-          profiles:profiles(id, name, avatar_url),
+          host:profiles!host_id(id, name, avatar_url),
           stay_images:stay_images(id, image_path, is_primary, display_order),
           stay_reviews:stay_reviews(id, rating, comment, user_id, created_at),
           stay_amenities:stay_amenities(amenity_id, amenities:amenities(id, name))
@@ -508,10 +507,9 @@ export const stayService = {
         return null;
       }
       
-      // Parse the nested objects - they come as arrays but we need the first item
-      const userProfile = Array.isArray(data.profiles) && data.profiles.length > 0 
-        ? data.profiles[0] 
-        : { name: 'Host', avatar_url: '' };
+      // Get the host profile data - using type assertion to help TypeScript
+      const hostProfile = data.host as UserProfile;
+      const userProfile = hostProfile || { name: 'Host', avatar_url: '' };
       
       const stayImages = Array.isArray(data.stay_images) ? data.stay_images : [];
       const stayReviews = Array.isArray(data.stay_reviews) ? data.stay_reviews : [];
@@ -622,7 +620,7 @@ export const stayService = {
           max_guests,
           location_name,
           host_id,
-          profiles:profiles(name, avatar_url),
+          host:profiles!host_id(id, name, avatar_url),
           stay_images:stay_images(id, image_path, is_primary, display_order),
           stay_reviews:stay_reviews(rating),
           stay_amenities:stay_amenities(amenity_id, amenities:amenities(id, name))
@@ -643,10 +641,9 @@ export const stayService = {
       
       // Transform data to match our interface
       return data.map(stayData => {
-        // Parse the nested objects
-        const userProfile = Array.isArray(stayData.profiles) && stayData.profiles.length > 0 
-          ? stayData.profiles[0] 
-          : { name: 'Host', avatar_url: '' };
+        // Get the host profile data - using type assertion to help TypeScript
+        const hostProfile = stayData.host as UserProfile;
+        const userProfile = hostProfile || { name: 'Host', avatar_url: '' };
         
         const stayImages = Array.isArray(stayData.stay_images) ? stayData.stay_images : [];
         const stayReviews = Array.isArray(stayData.stay_reviews) ? stayData.stay_reviews : [];
