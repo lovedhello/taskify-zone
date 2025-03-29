@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -146,11 +145,11 @@ export default function HostFood() {
     try {
       setIsSubmitting(true);
 
-      // Remove the details property as it doesn't exist in the DB table schema
-      const { details, ...foodDataForDb } = foodData;
+    // Remove the details property as it doesn't exist in the DB table schema
+    const { details, ...foodDataForDb } = foodData;
 
-      // Pass only the properties that match the database schema
-      const createdExperience = await createFoodExperience(foodDataForDb);
+    // Pass only the properties that match the database schema
+    const createdExperience = await createFoodExperience(foodDataForDb);
 
       if (createdExperience) {
         toast({
@@ -181,11 +180,11 @@ export default function HostFood() {
     try {
       setIsSubmitting(true);
 
-      // Remove the details property as it doesn't exist in the DB table schema
-      const { details, ...foodDataForDb } = foodData;
+    // Remove the details property as it doesn't exist in the DB table schema
+    const { details, ...foodDataForDb } = foodData;
 
-      // Pass only the properties that match the database schema
-      await updateFoodExperience(id!, foodDataForDb);
+    // Pass only the properties that match the database schema
+    await updateFoodExperience(id!, foodDataForDb);
 
       toast({
         title: "Success",
@@ -372,7 +371,7 @@ export default function HostFood() {
                   <FormControl>
                     <Textarea placeholder="Describe the menu for your food experience" {...field} />
                   </FormControl>
-                  <FormDescription>Provide details about the dishes included in the experience.</FormDescription>
+                  <FormDescription>Provide details about the dishes included in the experience.</FormMessage>
                   <FormMessage />
                 </FormItem>
               )}
