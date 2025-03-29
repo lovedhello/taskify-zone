@@ -1,1092 +1,509 @@
 import { supabase } from '@/integrations/supabase/client';
 import type { FoodExperience } from '@/types/food';
+import type { Stay } from '@/types/stay';
 
 /**
  * Get all food experiences for the current host
  */
-export async function getHostFoodExperiences() {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
-
-  const userId = session.session.user.id;
-
-  const { data, error } = await supabase
-    .from('food_experiences')
-    .select(`
-      *,
-      images:food_experience_images(id, image_path, is_primary, display_order)
-    `)
-    .eq('host_id', userId)
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    console.error('Error fetching host food experiences:', error);
-    throw error;
-  }
-
-  return data.map((experience) => {
-    const images = experience.images.map((img: any) => ({
-      id: img.id,
-      url: img.image_path,
-      order: img.display_order || 0,
-      is_primary: img.is_primary || false,
-    }));
-
-    // Sort images by display_order
-    images.sort((a, b) => a.order - b.order);
-
-    return {
-      id: experience.id,
-      title: experience.title,
-      description: experience.description,
-      status: experience.status,
-      images: images,
-      price_per_person: experience.price_per_person,
-      cuisine_type: experience.cuisine_type,
-      menu_description: experience.menu_description || '',
-      location_name: experience.location_name,
-      created_at: experience.created_at,
-      updated_at: experience.updated_at,
-      details: {
-        duration: experience.duration || '2 hours',
-        groupSize: `Max ${experience.max_guests} guests`,
-        includes: ['Food', 'Beverages'],
-        language: experience.language || 'English',
-        location: `${experience.city}, ${experience.state}`,
-      }
-    };
-  });
-}
-
-/**
- * Create a new food experience
- */
-export async function createFoodExperience(experienceData: Partial<FoodExperience>) {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
-
-  const userId = session.session.user.id;
-
-  // First, check if user is a host
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('is_host')
-    .eq('id', userId)
-    .single();
-
-  if (profileError) {
-    console.error('Error fetching user profile:', profileError);
-    throw profileError;
-  }
-
-  // If not a host, update profile to make them a host
-  if (!profile.is_host) {
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ is_host: true })
-      .eq('id', userId);
-
-    if (updateError) {
-      console.error('Error updating host status:', updateError);
-      throw updateError;
-    }
-  }
-
-  // Create the food experience
-  const { data, error } = await supabase
-    .from('food_experiences')
-    .insert({
-      host_id: userId,
-      title: experienceData.title || 'Untitled Experience',
-      description: experienceData.description || '',
-      price_per_person: experienceData.price_per_person || 0,
-      cuisine_type: experienceData.cuisine_type || 'Other',
-      menu_description: experienceData.menu_description || '',
-      location_name: experienceData.location_name || '',
-      address: experienceData.details?.location || '',
-      city: experienceData.details?.location?.split(',')[0] || '',
-      state: experienceData.details?.location?.split(',')[1]?.trim() || '',
-      zipcode: experienceData.zipcode || '',
-      latitude: experienceData.coordinates?.lat || 0,
-      longitude: experienceData.coordinates?.lng || 0,
-      duration: experienceData.details?.duration || '2 hours',
-      max_guests: parseInt(experienceData.details?.groupSize?.replace(/\D/g, '') || '8'),
-      language: experienceData.details?.language || 'English',
-      status: 'draft'
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error creating food experience:', error);
-    throw error;
-  }
-
-  return data;
-}
-
-/**
- * Update an existing food experience
- */
-export async function updateFoodExperience(id: string, experienceData: Partial<FoodExperience>) {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
-
-  const userId = session.session.user.id;
-
-  // Check ownership of the experience
-  const { data: existingExp, error: checkError } = await supabase
-    .from('food_experiences')
-    .select('host_id')
-    .eq('id', id)
-    .single();
-
-  if (checkError) {
-    console.error('Error checking experience ownership:', checkError);
-    throw checkError;
-  }
-
-  if (existingExp.host_id !== userId) {
-    throw new Error('You do not have permission to update this experience');
-  }
-
-  // Update the food experience
-  const { data, error } = await supabase
-    .from('food_experiences')
-    .update({
-      title: experienceData.title,
-      description: experienceData.description,
-      price_per_person: experienceData.price_per_person,
-      cuisine_type: experienceData.cuisine_type,
-      menu_description: experienceData.menu_description,
-      location_name: experienceData.location_name,
-      address: experienceData.details?.location || '',
-      city: experienceData.details?.location?.split(',')[0] || '',
-      state: experienceData.details?.location?.split(',')[1]?.trim() || '',
-      zipcode: experienceData.zipcode || '',
-      latitude: experienceData.coordinates?.lat || 0,
-      longitude: experienceData.coordinates?.lng || 0,
-      duration: experienceData.details?.duration,
-      max_guests: parseInt(experienceData.details?.groupSize?.replace(/\D/g, '') || '8'),
-      language: experienceData.details?.language,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error updating food experience:', error);
-    throw error;
-  }
-
-  return data;
-}
-
-/**
- * Change food experience status (draft, published, archived)
- */
-export async function changeFoodExperienceStatus(id: string, status: 'draft' | 'published' | 'archived') {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
-
-  const userId = session.session.user.id;
-
-  // Check ownership of the experience
-  const { data: existingExp, error: checkError } = await supabase
-    .from('food_experiences')
-    .select('host_id')
-    .eq('id', id)
-    .single();
-
-  if (checkError) {
-    console.error('Error checking experience ownership:', checkError);
-    throw checkError;
-  }
-
-  if (existingExp.host_id !== userId) {
-    throw new Error('You do not have permission to update this experience');
-  }
-
-  // Update the status
-  const { data, error } = await supabase
-    .from('food_experiences')
-    .update({
-      status,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error updating food experience status:', error);
-    throw error;
-  }
-
-  return data;
-}
-
-/**
- * Delete a food experience
- */
-export async function deleteFoodExperience(id: string) {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
-
-  const userId = session.session.user.id;
-
-  // Check ownership of the experience
-  const { data: existingExp, error: checkError } = await supabase
-    .from('food_experiences')
-    .select('host_id')
-    .eq('id', id)
-    .single();
-
-  if (checkError) {
-    console.error('Error checking experience ownership:', checkError);
-    throw checkError;
-  }
-
-  if (existingExp.host_id !== userId) {
-    throw new Error('You do not have permission to delete this experience');
-  }
-
-  // Delete the experience
-  const { error } = await supabase
-    .from('food_experiences')
-    .delete()
-    .eq('id', id);
-
-  if (error) {
-    console.error('Error deleting food experience:', error);
-    throw error;
-  }
-
-  return true;
-}
-
-/**
- * Upload an image for a food experience
- */
-export async function uploadFoodExperienceImage(
-  experienceId: string, 
-  file: File, 
-  isPrimary: boolean = false,
-  displayOrder: number = 0
-) {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
-
-  // Verify if experienceId is a valid UUID
-  const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(experienceId);
-  
-  if (!isValidUUID) {
-    // If not a valid UUID, it's likely a sample or test image, so just return success
-    console.log('Non-UUID experience ID provided. This might be temporary data.');
-    
-    // Return a placeholder for preview purposes only
-    return {
-      id: `preview-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
-      url: URL.createObjectURL(file),
-      is_primary: isPrimary,
-      order: displayOrder
-    };
-  }
-
-  const userId = session.session.user.id;
-  
+export async function getHostFoodExperiences(): Promise<FoodExperience[]> {
   try {
-    // Check ownership of the experience
-    const { data: existingExp, error: checkError } = await supabase
-      .from('food_experiences')
-      .select('host_id')
-      .eq('id', experienceId)
-      .single();
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session) return [];
 
-    if (checkError) {
-      console.error('Error checking ownership:', checkError);
-      throw checkError;
-    }
+    const hostId = session.session.user.id;
 
-    if (existingExp.host_id !== userId) {
-      throw new Error('You do not have permission to upload images for this experience');
-    }
-
-    // Generate a unique filename
-    const fileExt = file.name.split('.').pop();
-    const timestamp = new Date().toISOString().replace(/[^0-9]/g, '');
-    const fileName = `exp_${experienceId.substring(0, 8)}_${timestamp}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
-    const filePath = `food-experience-images/${fileName}`;
-
-    // Upload the file to Supabase Storage
-    const { error: uploadError } = await supabase.storage
-      .from('food-experience-images')
-      .upload(fileName, file, {
-        cacheControl: '3600',
-        upsert: false,
-        contentType: file.type // Explicitly set the content type to preserve image quality
-      });
-
-    if (uploadError) {
-      console.error('Error uploading file:', uploadError);
-      throw uploadError;
-    }
-
-    // If this is set as the primary image, reset all other images to not primary
-    if (isPrimary) {
-      await supabase
-        .from('food_experience_images')
-        .update({ is_primary: false })
-        .eq('experience_id', experienceId);
-    }
-
-    // Create a record in the food_experience_images table
     const { data, error } = await supabase
-      .from('food_experience_images')
-      .insert({
-        experience_id: experienceId,
-        image_path: filePath,
-        is_primary: isPrimary,
-        display_order: displayOrder
-      })
-      .select()
-      .single();
+      .from('food_experiences')
+      .select(`
+        *,
+        images:food_experience_images(id, image_path, is_primary, display_order)
+      `)
+      .eq('host_id', hostId);
 
     if (error) {
-      // If we failed to insert the record but uploaded the file, try to clean up
-      await supabase.storage
-        .from('food-experience-images')
-        .remove([fileName]);
-      
-      console.error('Error creating image record:', error);
-      throw error;
+      console.error('Error fetching food experiences:', error);
+      return [];
     }
 
-    return {
-      id: data.id,
-      url: filePath,
-      is_primary: isPrimary,
-      order: displayOrder
-    };
+    // Process the data into the right format
+    return data.map((experience) => {
+      // Format images
+      const images = experience.images?.map((img: any) => ({
+        url: img.image_path,
+        order: img.display_order || 0,
+        is_primary: img.is_primary || false,
+      })) || [];
+
+      // Sort images by display_order with primary images first
+      images.sort((a, b) => {
+        if (a.is_primary && !b.is_primary) return -1;
+        if (!a.is_primary && b.is_primary) return 1;
+        return a.order - b.order;
+      });
+
+      return {
+        id: experience.id,
+        title: experience.title,
+        description: experience.description,
+        images: images,
+        price_per_person: experience.price_per_person,
+        cuisine_type: experience.cuisine_type,
+        menu_description: experience.menu_description || '',
+        location_name: experience.location_name,
+        host: {
+          name: 'Host',
+          image: '/default-avatar.png',
+          rating: 4.5, // Default value, would ideally be calculated from reviews
+          reviews: 0 // Default value, would ideally be count of reviews
+        },
+        details: {
+          duration: experience.duration || '2 hours',
+          groupSize: `Max ${experience.max_guests} guests`,
+          includes: ['Food', 'Beverages'],
+          language: experience.language || 'English',
+          location: `${experience.city}, ${experience.state}`,
+        },
+        coordinates: experience.latitude && experience.longitude
+          ? { lat: experience.latitude, lng: experience.longitude }
+          : undefined
+      };
+    });
   } catch (error) {
-    if (error instanceof Error && error.message.includes('row-level security policy')) {
-      // Add RLS policy error handling
-      console.error('Security policy error. Trying fallback approach...');
-      
-      // Create a more specific error message to help debug
-      throw new Error(`Permission denied: You don't have the proper permissions to upload images. Please contact support with error code: HOST-IMG-${Date.now()}`);
-    }
-    
-    throw error;
+    console.error('Error in getFoodExperiences:', error);
+    return [];
   }
-}
-
-/**
- * Delete an image for a food experience
- */
-export async function deleteFoodExperienceImage(imageId: string) {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
-
-  // Check if the imageId is a valid UUID
-  const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(imageId);
-  
-  // If not a valid UUID, it's likely a sample or test image, so just return success
-  if (!isValidUUID) {
-    console.log('Skipping deletion of non-UUID image ID:', imageId);
-    return true;
-  }
-
-  const userId = session.session.user.id;
-
-  // Get the image record and check experience ownership
-  const { data: image, error: imageError } = await supabase
-    .from('food_experience_images')
-    .select(`
-      image_path,
-      experience_id,
-      food_experiences(host_id)
-    `)
-    .eq('id', imageId)
-    .single();
-
-  if (imageError) {
-    console.error('Error fetching image:', imageError);
-    throw imageError;
-  }
-
-  // Check if the current user is the host
-  const experiences = image.food_experiences as { host_id: string }[];
-  if (!experiences || experiences.length === 0 || experiences[0].host_id !== userId) {
-    throw new Error('You do not have permission to delete this image');
-  }
-
-  // Delete the image from storage
-  const filePath = image.image_path.replace('food-experience-images/', '');
-  const { error: storageError } = await supabase.storage
-    .from('food-experience-images')
-    .remove([filePath]);
-
-  if (storageError) {
-    console.error('Error deleting image from storage:', storageError);
-    // Continue with database deletion even if storage deletion fails
-  }
-
-  // Delete the image record
-  const { error } = await supabase
-    .from('food_experience_images')
-    .delete()
-    .eq('id', imageId);
-
-  if (error) {
-    console.error('Error deleting image record:', error);
-    throw error;
-  }
-
-  return true;
-}
-
-/**
- * Update the display order of images
- */
-export async function updateImageOrder(experienceId: string, imageOrders: { id: string, order: number }[]) {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
-
-  const userId = session.session.user.id;
-
-  // Check ownership of the experience
-  const { data: existingExp, error: checkError } = await supabase
-    .from('food_experiences')
-    .select('host_id')
-    .eq('id', experienceId)
-    .single();
-
-  if (checkError) {
-    console.error('Error checking experience ownership:', checkError);
-    throw checkError;
-  }
-
-  if (existingExp.host_id !== userId) {
-    throw new Error('You do not have permission to update images for this experience');
-  }
-
-  // Update each image's order
-  const promises = imageOrders.map(({ id, order }) => {
-    return supabase
-      .from('food_experience_images')
-      .update({ display_order: order })
-      .eq('id', id);
-  });
-
-  try {
-    await Promise.all(promises);
-    return true;
-  } catch (error) {
-    console.error('Error updating image orders:', error);
-    throw error;
-  }
-}
-
-/**
- * Get host profile information
- */
-export async function getHostProfile() {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
-
-  const userId = session.session.user.id;
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .single();
-
-  if (error) {
-    console.error('Error fetching host profile:', error);
-    throw error;
-  }
-
-  return data;
-}
-
-/**
- * Update host profile
- */
-export async function updateHostProfile(profileData: {
-  name?: string;
-  avatar_url?: string;
-  bio?: string;
-  phone?: string;
-}) {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
-
-  const userId = session.session.user.id;
-
-  const { data, error } = await supabase
-    .from('profiles')
-    .update({
-      ...profileData,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', userId)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error updating host profile:', error);
-    throw error;
-  }
-
-  return data;
-}
-
-/**
- * Set an image as the primary image for a food experience
- */
-export async function setFoodExperiencePrimaryImage(experienceId: string, imageId: string) {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
-
-  const userId = session.session.user.id;
-
-  // Check ownership of the experience
-  const { data: existingExp, error: checkError } = await supabase
-    .from('food_experiences')
-    .select('host_id')
-    .eq('id', experienceId)
-    .single();
-
-  if (checkError) {
-    console.error('Error checking experience ownership:', checkError);
-    throw checkError;
-  }
-
-  if (existingExp.host_id !== userId) {
-    throw new Error('You do not have permission to update images for this experience');
-  }
-
-  // First, set all images for this experience to not primary
-  const { error: resetError } = await supabase
-    .from('food_experience_images')
-    .update({ is_primary: false })
-    .eq('experience_id', experienceId);
-
-  if (resetError) {
-    console.error('Error resetting primary status of images:', resetError);
-    throw resetError;
-  }
-
-  // Then set the selected image as primary
-  const { error } = await supabase
-    .from('food_experience_images')
-    .update({ is_primary: true })
-    .eq('id', imageId);
-
-  if (error) {
-    console.error('Error setting primary image:', error);
-    throw error;
-  }
-
-  return true;
 }
 
 /**
  * Get all stays for the current host
  */
-export async function getHostStays() {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
+export async function getHostStays(): Promise<Stay[]> {
+  try {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session) return [];
+
+    const hostId = session.session.user.id;
+
+    const { data, error } = await supabase
+      .from('stays')
+      .select(`
+        *,
+        images:stay_images(id, image_path, is_primary, display_order)
+      `)
+      .eq('host_id', hostId);
+
+    if (error) {
+      console.error('Error fetching stays:', error);
+      return [];
+    }
+
+    // Process the data into the right format
+    return data.map((stay) => {
+      // Format images
+      const images = stay.images?.map((img: any) => ({
+        url: img.image_path,
+        order: img.display_order || 0,
+        is_primary: img.is_primary || false,
+      })) || [];
+
+      // Sort images by display_order with primary images first
+      images.sort((a, b) => {
+        if (a.is_primary && !b.is_primary) return -1;
+        if (!a.is_primary && b.is_primary) return 1;
+        return a.order - b.order;
+      });
+
+      return {
+        id: stay.id,
+        title: stay.title,
+        description: stay.description,
+        images: images,
+        price_per_night: stay.price_per_night,
+        property_type: stay.property_type,
+        location_name: stay.location_name,
+        max_guests: stay.max_guests,
+        bedrooms: stay.bedrooms,
+        beds: stay.beds,
+        bathrooms: stay.bathrooms,
+        host: {
+          name: 'Host',
+          image: '/default-avatar.png',
+          rating: 4.5, // Default value, would ideally be calculated from reviews
+          reviews: 0 // Default value, would ideally be count of reviews
+        },
+        coordinates: stay.latitude && stay.longitude
+          ? { lat: stay.latitude, lng: stay.longitude }
+          : undefined,
+        amenities: []
+      };
+    });
+  } catch (error) {
+    console.error('Error in getStays:', error);
+    return [];
   }
+}
 
-  const userId = session.session.user.id;
+/**
+ * Get host info
+ */
+export async function getHostInfo(): Promise<{ host_id: string }[]> {
+  try {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session.session) return [];
 
-  const { data, error } = await supabase
-    .from('stays')
-    .select(`
-      *,
-      images:stay_images(id, image_path, is_primary, display_order)
-    `)
-    .eq('host_id', userId)
-    .order('created_at', { ascending: false });
+    const hostId = session.session.user.id;
+    // Convert the single object to an array
+    return [{ host_id: hostId }];
+  } catch (error) {
+    console.error('Error getting host info:', error);
+    return [];
+  }
+}
 
-  if (error) {
-    console.error('Error fetching host stays:', error);
+/**
+ * Change food experience status
+ */
+export async function changeFoodExperienceStatus(id: string, status: 'draft' | 'published' | 'archived') {
+  try {
+    const { data, error } = await supabase
+      .from('food_experiences')
+      .update({ status })
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error updating food experience status:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error in changeFoodExperienceStatus:', error);
     throw error;
   }
+}
 
-  return data.map((stay) => {
-    const images = stay.images.map((img: any) => ({
-      id: img.id,
-      url: img.image_path,
-      order: img.display_order || 0,
-      is_primary: img.is_primary || false,
-    }));
+/**
+ * Change stay status
+ */
+export async function changeStayStatus(id: string, status: 'draft' | 'published' | 'archived') {
+  try {
+    const { data, error } = await supabase
+      .from('stays')
+      .update({ status })
+      .eq('id', id);
 
-    // Sort images by display_order
-    images.sort((a, b) => a.order - b.order);
+    if (error) {
+      console.error('Error updating stay status:', error);
+      throw error;
+    }
 
-    return {
-      id: stay.id,
-      title: stay.title,
-      description: stay.description,
-      status: stay.status,
-      images: images,
-      price_per_night: stay.price_per_night,
-      property_type: stay.property_type,
-      location_name: stay.location_name || stay.location || '',
-      max_guests: stay.max_guests,
-      bedrooms: stay.bedrooms,
-      beds: stay.beds,
-      bathrooms: stay.bathrooms,
-      created_at: stay.created_at,
-      updated_at: stay.updated_at,
-      address: stay.address,
-      zipcode: stay.zipcode,
-      city: stay.city,
-      state: stay.state,
-      latitude: stay.latitude,
-      longitude: stay.longitude,
-      amenities: Array.isArray(stay.amenities) ? stay.amenities : []
-    };
-  });
+    return data;
+  } catch (error) {
+    console.error('Error in changeStayStatus:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete food experience
+ */
+export async function deleteFoodExperience(id: string) {
+  try {
+    const { data, error } = await supabase
+      .from('food_experiences')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting food experience:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error in deleteFoodExperience:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete stay
+ */
+export async function deleteStay(id: string) {
+  try {
+    const { data, error } = await supabase
+      .from('stays')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting stay:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error in deleteStay:', error);
+    throw error;
+  }
+}
+
+/**
+ * Create a new food experience
+ */
+export async function createFoodExperience(foodExperience: any) {
+  try {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) {
+      throw new Error('User not authenticated');
+    }
+
+    const hostId = session.session.user.id;
+
+    // Insert the food experience
+    const { data, error } = await supabase
+      .from('food_experiences')
+      .insert([
+        {
+          ...foodExperience,
+          host_id: hostId,
+        },
+      ])
+      .select()
+
+    if (error) {
+      console.error('Error creating food experience:', error);
+      throw error;
+    }
+
+    return data && data.length > 0 ? data[0] : null;
+  } catch (error) {
+    console.error('Error in createFoodExperience:', error);
+    throw error;
+  }
 }
 
 /**
  * Create a new stay
  */
-export async function createStay(stayData) {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
-
-  const userId = session.session.user.id;
-
-  // First, check if user is a host
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('is_host')
-    .eq('id', userId)
-    .single();
-
-  if (profileError) {
-    console.error('Error fetching user profile:', profileError);
-    throw profileError;
-  }
-
-  // If not a host, update profile to make them a host
-  if (!profile.is_host) {
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ is_host: true })
-      .eq('id', userId);
-
-    if (updateError) {
-      console.error('Error updating host status:', updateError);
-      throw updateError;
+export async function createStay(stay: any) {
+  try {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) {
+      throw new Error('User not authenticated');
     }
-  }
 
-  // Create the stay
-  const { data, error } = await supabase
-    .from('stays')
-    .insert({
-      host_id: userId,
-      title: stayData.title || 'Untitled Stay',
-      description: stayData.description || '',
-      price_per_night: stayData.price_per_night || 0,
-      bedrooms: stayData.bedrooms || 1,
-      beds: stayData.beds || 1,
-      bathrooms: stayData.bathrooms || 1,
-      max_guests: stayData.max_guests || 1,
-      amenities: stayData.amenities || [],
-      property_type: stayData.property_type || 'house',
-      location_name: stayData.location_name || '',
-      address: stayData.address || '',
-      city: stayData.city || '',
-      state: stayData.state || '',
-      zipcode: stayData.zipcode || '',
-      latitude: stayData.latitude || 0,
-      longitude: stayData.longitude || 0,
-      status: stayData.status || 'draft'
-    })
-    .select()
-    .single();
+    const hostId = session.session.user.id;
 
-  if (error) {
-    console.error('Error creating stay:', error);
+    // Insert the stay
+    const { data, error } = await supabase
+      .from('stays')
+      .insert([
+        {
+          ...stay,
+          host_id: hostId,
+        },
+      ])
+      .select()
+
+    if (error) {
+      console.error('Error creating stay:', error);
+      throw error;
+    }
+
+    return data && data.length > 0 ? data[0] : null;
+  } catch (error) {
+    console.error('Error in createStay:', error);
     throw error;
   }
+}
 
-  // Insert amenities into the stay_amenities junction table
-  if (data && stayData.amenities && stayData.amenities.length > 0) {
-    const amenityRecords = stayData.amenities.map(amenityId => ({
-      stay_id: data.id,
-      amenity_id: amenityId,
-      created_at: new Date().toISOString()
-    }));
+/**
+ * Update an existing food experience
+ */
+export async function updateFoodExperience(id: string, updates: any) {
+  try {
+    const { data, error } = await supabase
+      .from('food_experiences')
+      .update(updates)
+      .eq('id', id)
+      .select();
 
-    const { error: amenitiesError } = await supabase
-      .from('stay_amenities')
-      .insert(amenityRecords);
-
-    if (amenitiesError) {
-      console.error('Error creating amenity records:', amenitiesError);
-      // Continue even if amenity records fail
+    if (error) {
+      console.error('Error updating food experience:', error);
+      throw error;
     }
+
+    return data;
+  } catch (error) {
+    console.error('Error in updateFoodExperience:', error);
+    throw error;
   }
-
-  // Handle availability if provided
-  if (stayData.availability && stayData.availability.length > 0) {
-    const availabilityRecords = stayData.availability.map(item => ({
-      stay_id: data.id,
-      date: item.date,
-      price: item.price_override || stayData.price_per_night,
-      is_available: item.is_available
-    }));
-
-    const { error: availabilityError } = await supabase
-      .from('stay_availability')
-      .insert(availabilityRecords);
-
-    if (availabilityError) {
-      console.error('Error creating availability records:', availabilityError);
-      // Continue even if availability records fail
-    }
-  }
-
-  return data;
 }
 
 /**
  * Update an existing stay
  */
-export async function updateStay(id, stayData) {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
+export async function updateStay(id: string, updates: any) {
+  try {
+    const { data, error } = await supabase
+      .from('stays')
+      .update(updates)
+      .eq('id', id)
+      .select();
 
-  const userId = session.session.user.id;
+    if (error) {
+      console.error('Error updating stay:', error);
+      throw error;
+    }
 
-  // Check ownership of the stay
-  const { data: existingStay, error: checkError } = await supabase
-    .from('stays')
-    .select('host_id')
-    .eq('id', id)
-    .single();
-
-  if (checkError) {
-    console.error('Error checking stay ownership:', checkError);
-    throw checkError;
-  }
-
-  if (existingStay.host_id !== userId) {
-    throw new Error('You do not have permission to update this stay');
-  }
-
-  // Update the stay
-  const { data, error } = await supabase
-    .from('stays')
-    .update({
-      title: stayData.title,
-      description: stayData.description,
-      price_per_night: stayData.price_per_night,
-      bedrooms: stayData.bedrooms,
-      beds: stayData.beds,
-      bathrooms: stayData.bathrooms,
-      max_guests: stayData.max_guests,
-      amenities: stayData.amenities,
-      property_type: stayData.property_type,
-      location_name: stayData.location_name,
-      address: stayData.address,
-      city: stayData.city,
-      state: stayData.state,
-      zipcode: stayData.zipcode,
-      latitude: stayData.latitude,
-      longitude: stayData.longitude,
-      status: stayData.status,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', id)
-    .select()
-    .single();
-
-  if (error) {
-    console.error('Error updating stay:', error);
+    return data;
+  } catch (error) {
+    console.error('Error in updateStay:', error);
     throw error;
   }
-
-  // Update amenities in the stay_amenities junction table
-  if (stayData.amenities) {
-    // First, delete existing amenity associations
-    const { error: deleteError } = await supabase
-      .from('stay_amenities')
-      .delete()
-      .eq('stay_id', id);
-
-    if (deleteError) {
-      console.error('Error deleting existing amenity records:', deleteError);
-      // Continue even if delete fails
-    }
-
-    // Then insert new ones if there are any amenities selected
-    if (stayData.amenities.length > 0) {
-      const amenityRecords = stayData.amenities.map(amenityId => ({
-        stay_id: id,
-        amenity_id: amenityId,
-        created_at: new Date().toISOString()
-      }));
-
-      const { error: insertError } = await supabase
-        .from('stay_amenities')
-        .insert(amenityRecords);
-
-      if (insertError) {
-        console.error('Error creating amenity records:', insertError);
-        // Continue even if insert fails
-      }
-    }
-  }
-
-  return data;
 }
 
 /**
- * Change stay status (draft, published, archived)
+ * Upload a food experience image
  */
-export async function changeStayStatus(id, status) {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
+export async function uploadFoodExperienceImage(
+  experienceId: string,
+  file: File,
+  isPrimary: boolean,
+  order: number
+) {
+  try {
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) {
+      throw new Error('User not authenticated');
+    }
 
-  const userId = session.session.user.id;
+    const hostId = session.session.user.id;
+    const timestamp = Date.now();
+    const filePath = `food-experience-images/${hostId}/${experienceId}/${timestamp}-${file.name}`;
 
-  // Check ownership of the stay
-  const { data: existingStay, error: checkError } = await supabase
-    .from('stays')
-    .select('host_id')
-    .eq('id', id)
-    .single();
+    const { data, error } = await supabase.storage
+      .from('food-experience-images')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false,
+      });
 
-  if (checkError) {
-    console.error('Error checking stay ownership:', checkError);
-    throw checkError;
-  }
+    if (error) {
+      console.error('Error uploading image:', error);
+      throw error;
+    }
 
-  if (existingStay.host_id !== userId) {
-    throw new Error('You do not have permission to update this stay');
-  }
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('food-experience-images')
+      .getPublicUrl(filePath);
 
-  // Update the status
-  const { data, error } = await supabase
-    .from('stays')
-    .update({
-      status,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', id)
-    .select()
-    .single();
+    // Save image details to the database
+    const { data: imageData, error: imageError } = await supabase
+      .from('food_experience_images')
+      .insert([
+        {
+          experience_id: experienceId,
+          image_path: filePath,
+          is_primary: isPrimary,
+          display_order: order,
+        },
+      ])
+      .select();
 
-  if (error) {
-    console.error('Error updating stay status:', error);
+    if (imageError) {
+      console.error('Error saving image details:', imageError);
+      throw imageError;
+    }
+
+    return { ...imageData, publicURL: urlData.publicUrl };
+  } catch (error) {
+    console.error('Error in uploadFoodExperienceImage:', error);
     throw error;
   }
-
-  return data;
-}
-
-/**
- * Delete a stay
- */
-export async function deleteStay(id) {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
-
-  const userId = session.session.user.id;
-
-  // Check ownership of the stay
-  const { data: existingStay, error: checkError } = await supabase
-    .from('stays')
-    .select('host_id')
-    .eq('id', id)
-    .single();
-
-  if (checkError) {
-    console.error('Error checking stay ownership:', checkError);
-    throw checkError;
-  }
-
-  if (existingStay.host_id !== userId) {
-    throw new Error('You do not have permission to delete this stay');
-  }
-
-  // First delete related records
-  // Delete stay images
-  const { error: imagesError } = await supabase
-    .from('stay_images')
-    .delete()
-    .eq('stay_id', id);
-
-  if (imagesError) {
-    console.error('Error deleting stay images:', imagesError);
-    // Continue even if image deletion fails
-  }
-
-  // Delete availability records
-  const { error: availabilityError } = await supabase
-    .from('stay_availability')
-    .delete()
-    .eq('stay_id', id);
-
-  if (availabilityError) {
-    console.error('Error deleting availability records:', availabilityError);
-    // Continue even if availability deletion fails
-  }
-
-  // Finally delete the stay
-  const { error } = await supabase
-    .from('stays')
-    .delete()
-    .eq('id', id);
-
-  if (error) {
-    console.error('Error deleting stay:', error);
-    throw error;
-  }
-
-  return true;
 }
 
 /**
  * Upload a stay image
  */
 export async function uploadStayImage(
-  stayId,
-  file,
-  isPrimary = false,
-  displayOrder = 0
+  stayId: string,
+  file: File,
+  isPrimary: boolean,
+  order: number
 ) {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
-
-  const userId = session.session.user.id;
-
-  // Check ownership of the stay
-  const { data: existingStay, error: checkError } = await supabase
-    .from('stays')
-    .select('host_id')
-    .eq('id', stayId)
-    .single();
-
-  if (checkError) {
-    console.error('Error checking stay ownership:', checkError);
-    throw checkError;
-  }
-
-  if (existingStay.host_id !== userId) {
-    throw new Error('You do not have permission to upload images to this stay');
-  }
-
-  // If this is set as primary, update all other images to non-primary
-  if (isPrimary) {
-    const { error: updateError } = await supabase
-      .from('stay_images')
-      .update({ is_primary: false })
-      .eq('stay_id', stayId);
-
-    if (updateError) {
-      console.error('Error updating existing images:', updateError);
-      // Continue even if update fails
-    }
-  }
-
   try {
-    // Generate a unique filename
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${stayId}-${Date.now()}.${fileExt}`;
-    
-    // Note: Bucket should already exist in Supabase and have proper RLS policies
-    // We don't need to create or update buckets from the client side as this requires admin privileges
-    // Bucket management should be done through Supabase dashboard or migrations
-    
-    // Upload the file to Supabase Storage with proper auth
-    const { error: uploadError } = await supabase.storage
+    const { data: session } = await supabase.auth.getSession();
+    if (!session?.session?.user) {
+      throw new Error('User not authenticated');
+    }
+
+    const hostId = session.session.user.id;
+    const timestamp = Date.now();
+    const filePath = `stay-images/${hostId}/${stayId}/${timestamp}-${file.name}`;
+
+    const { data, error } = await supabase.storage
       .from('stay-images')
-      .upload(fileName, file, {
+      .upload(filePath, file, {
         cacheControl: '3600',
-        upsert: true, // Use upsert to avoid conflicts
-        contentType: file.type // Explicitly set content type
+        upsert: false,
       });
 
-    if (uploadError) {
-      console.error('Error uploading image:', uploadError);
-      throw uploadError;
+    if (error) {
+      console.error('Error uploading image:', error);
+      throw error;
     }
 
-    // Get the public URL of the uploaded file
-    const { data: { publicUrl } } = supabase.storage
+    // Get public URL
+    const { data: urlData } = supabase.storage
       .from('stay-images')
-      .getPublicUrl(fileName);
+      .getPublicUrl(filePath);
 
-    const filePath = `stay-images/${fileName}`;
-
-    // Insert image record into the database
-    const { data, error: insertError } = await supabase
+    // Save image details to the database
+    const { data: imageData, error: imageError } = await supabase
       .from('stay_images')
-      .insert({
-        stay_id: stayId,
-        image_path: filePath,
-        is_primary: isPrimary,
-        display_order: displayOrder
-      })
-      .select()
-      .single();
+      .insert([
+        {
+          stay_id: stayId,
+          image_path: filePath,
+          is_primary: isPrimary,
+          display_order: order,
+        },
+      ])
+      .select();
 
-    if (insertError) {
-      console.error('Error creating image record:', insertError);
-      throw insertError;
+    if (imageError) {
+      console.error('Error saving image details:', imageError);
+      throw imageError;
     }
 
-    return {
-      ...data,
-      publicUrl
-    };
+    return { ...imageData, publicURL: urlData.publicUrl };
   } catch (error) {
-    console.error('Error uploading image:', error);
+    console.error('Error in uploadStayImage:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete a food experience image
+ */
+export async function deleteFoodExperienceImage(imageId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('food_experience_images')
+      .delete()
+      .eq('id', imageId);
+
+    if (error) {
+      console.error('Error deleting food experience image:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error in deleteFoodExperienceImage:', error);
     throw error;
   }
 }
@@ -1094,119 +511,203 @@ export async function uploadStayImage(
 /**
  * Delete a stay image
  */
-export async function deleteStayImage(imageId) {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
-  }
+export async function deleteStayImage(imageId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('stay_images')
+      .delete()
+      .eq('id', imageId);
 
-  const userId = session.session.user.id;
-
-  // First, get the image record to get the stay_id
-  const { data: image, error: imageError } = await supabase
-    .from('stay_images')
-    .select('image_path, stay_id')
-    .eq('id', imageId)
-    .single();
-
-  if (imageError) {
-    console.error('Error fetching image:', imageError);
-    throw imageError;
-  }
-
-  // Now check stay ownership with a separate query
-  const { data: stay, error: stayError } = await supabase
-    .from('stays')
-    .select('host_id')
-    .eq('id', image.stay_id)
-    .single();
-
-  if (stayError) {
-    console.error('Error fetching stay:', stayError);
-    throw stayError;
-  }
-
-  // Check if the current user is the host
-  if (stay.host_id !== userId) {
-    throw new Error('You do not have permission to delete this image');
-  }
-
-  // If the image is stored in Supabase Storage, delete it
-  if (image.image_path && image.image_path.startsWith('stay-images/')) {
-    const fileName = image.image_path.replace('stay-images/', '');
-    const { error: storageError } = await supabase.storage
-      .from('stay-images')
-      .remove([fileName]);
-
-    if (storageError) {
-      console.error('Error deleting image from storage:', storageError);
-      // Continue even if storage deletion fails
+    if (error) {
+      console.error('Error deleting stay image:', error);
+      throw error;
     }
-  }
 
-  // Delete the image record
-  const { error } = await supabase
-    .from('stay_images')
-    .delete()
-    .eq('id', imageId);
-
-  if (error) {
-    console.error('Error deleting image record:', error);
+    return data;
+  } catch (error) {
+    console.error('Error in deleteStayImage:', error);
     throw error;
   }
-
-  return true;
 }
 
 /**
- * Set a stay image as the primary image
+ * Set a food experience image as primary
  */
-export async function setStayPrimaryImage(stayId, imageId) {
-  const { data: session } = await supabase.auth.getSession();
-  if (!session.session?.user) {
-    throw new Error('User not authenticated');
+export async function setFoodExperiencePrimaryImage(imageId: string, experienceId: string) {
+  try {
+    // First, set all images for the experience to not primary
+    const { error: resetError } = await supabase
+      .from('food_experience_images')
+      .update({ is_primary: false })
+      .eq('experience_id', experienceId);
+
+    if (resetError) {
+      console.error('Error resetting primary images:', resetError);
+      throw resetError;
+    }
+
+    // Then, set the selected image as primary
+    const { data, error } = await supabase
+      .from('food_experience_images')
+      .update({ is_primary: true })
+      .eq('id', imageId);
+
+    if (error) {
+      console.error('Error setting primary image:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error in setFoodExperiencePrimaryImage:', error);
+    throw error;
   }
+}
 
-  const userId = session.session.user.id;
+/**
+ * Set a stay image as primary
+ */
+export async function setStayPrimaryImage(imageId: string, stayId: string) {
+  try {
+    // First, set all images for the stay to not primary
+    const { error: resetError } = await supabase
+      .from('stay_images')
+      .update({ is_primary: false })
+      .eq('stay_id', stayId);
 
-  // Check ownership of the stay
-  const { data: existingStay, error: checkError } = await supabase
-    .from('stays')
-    .select('host_id')
-    .eq('id', stayId)
-    .single();
+    if (resetError) {
+      console.error('Error resetting primary images:', resetError);
+      throw resetError;
+    }
 
-  if (checkError) {
-    console.error('Error checking stay ownership:', checkError);
-    throw checkError;
+    // Then, set the selected image as primary
+    const { data, error } = await supabase
+      .from('stay_images')
+      .update({ is_primary: true })
+      .eq('id', imageId);
+
+    if (error) {
+      console.error('Error setting primary image:', error);
+      throw error;
+    }
+
+    return data;
+  } catch (error) {
+    console.error('Error in setStayPrimaryImage:', error);
+    throw error;
   }
+}
 
-  if (existingStay.host_id !== userId) {
-    throw new Error('You do not have permission to modify this stay');
+/**
+ * Get a stay by ID
+ */
+export async function getStayById(id: string): Promise<Stay | null> {
+  try {
+    const { data, error } = await supabase
+      .from('stays')
+      .select(`
+        *,
+        images:stay_images(id, image_path, is_primary, display_order)
+      `)
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      console.error('Error fetching stay:', error);
+      return null;
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    // Process the images
+    const images = data.images.map((img: any) => ({
+      url: img.image_path,
+      order: img.display_order || 0,
+      is_primary: img.is_primary || false,
+    }));
+
+    // Sort images by display_order
+    images.sort((a, b) => a.order - b.order);
+
+    return {
+      id: data.id,
+      title: data.title,
+      description: data.description,
+      images: images,
+      price_per_night: data.price_per_night,
+      property_type: data.property_type,
+      location_name: data.location_name,
+      max_guests: data.max_guests,
+      bedrooms: data.bedrooms,
+      beds: data.beds,
+      bathrooms: data.bathrooms,
+      host: {
+        name: 'Host',
+        image: '/default-avatar.png',
+        rating: 4.5, // Default value, would ideally be calculated from reviews
+        reviews: 0 // Default value, would ideally be count of reviews
+      },
+      coordinates: data.latitude && data.longitude
+        ? { lat: data.latitude, lng: data.longitude }
+        : undefined,
+      amenities: []
+    };
+  } catch (error) {
+    console.error('Error in getStayById:', error);
+    return null;
   }
+}
 
-  // Update all images for this stay to non-primary
-  const { error: updateAllError } = await supabase
-    .from('stay_images')
-    .update({ is_primary: false })
-    .eq('stay_id', stayId);
+/**
+ * Get stay details by ID
+ */
+export async function getStayDetailsById(id: string): Promise<any | null> {
+  try {
+    const { data, error } = await supabase
+      .from('stays')
+      .select(`
+        *,
+        stay_images(id, image_path, is_primary, display_order),
+        stay_amenities(amenity:amenities(id, name, category)),
+        stay_reviews(id, rating, comment, created_at)
+      `)
+      .eq('id', id)
+      .single();
 
-  if (updateAllError) {
-    console.error('Error updating images:', updateAllError);
-    throw updateAllError;
+    if (error) {
+      console.error('Error fetching stay details:', error);
+      return null;
+    }
+
+    if (!data) {
+      return null;
+    }
+
+    // Process the images
+    const images = data.stay_images.map((img: any) => ({
+      url: img.image_path,
+      order: img.display_order || 0,
+      is_primary: img.is_primary || false,
+    }));
+
+    // Sort images by display_order
+    images.sort((a, b) => a.order - b.order);
+
+    // Map stay_amenities to get the actual amenity data
+    const amenities = data.stay_amenities.map(item => 
+      item.amenity?.name || ''
+    ).filter(Boolean);
+
+    const stayDetails = {
+      ...data,
+      location_name: data.location_name || `${data.city}, ${data.state}`
+    };
+    
+    return stayDetails;
+  } catch (error) {
+    console.error('Error in getStayDetailsById:', error);
+    return null;
   }
-
-  // Set the selected image as primary
-  const { error: updateError } = await supabase
-    .from('stay_images')
-    .update({ is_primary: true })
-    .eq('id', imageId)
-    .eq('stay_id', stayId);
-
-  if (updateError) {
-    console.error('Error setting primary image:', updateError);
-    throw updateError;
-  }
-
-  return true;
-} 
+}

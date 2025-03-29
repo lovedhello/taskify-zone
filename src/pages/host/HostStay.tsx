@@ -191,9 +191,9 @@ const HostStay = () => {
         zipcode: stayData.zipcode,
         city: stayData.city,
         state: stayData.state,
-        latitude: parseFloat(stayData.latitude),
-        longitude: parseFloat(stayData.longitude),
-        displayLocation: stayData.location_name || stayData.location
+        latitude: parseFloat(stayData.latitude) || 0,
+        longitude: parseFloat(stayData.longitude) || 0,
+        displayLocation: stayData.location_name || `${stayData.city}, ${stayData.state}`
       };
       
       // Update state in a single batch
@@ -204,14 +204,14 @@ const HostStay = () => {
       form.reset({
         title: stayData.title,
         description: stayData.description,
-        location_name: stayData.location_name || stayData.location,
-        price_per_night: parseFloat(stayData.price_per_night),
-        max_guests: parseInt(stayData.max_guests),
-        bedrooms: parseInt(stayData.bedrooms),
-        beds: parseInt(stayData.beds) || parseInt(stayData.bedrooms),
+        location_name: stayData.location_name || `${stayData.city}, ${stayData.state}`,
+        price_per_night: parseFloat(stayData.price_per_night) || 0,
+        max_guests: parseInt(stayData.max_guests) || 1,
+        bedrooms: parseInt(stayData.bedrooms) || 1,
+        beds: parseInt(stayData.beds) || parseInt(stayData.bedrooms) || 1,
         bathrooms: parseInt(stayData.bathrooms) || 1,
         images: processedImages,
-        status: stayData.status,
+        status: stayData.status as 'draft' | 'published',
         amenities: stayAmenities.map((a: any) => 
           typeof a === 'object' ? a.id.toString() : a.toString()
         ),
@@ -224,8 +224,8 @@ const HostStay = () => {
         zipcode: stayData.zipcode,
         city: stayData.city,
         state: stayData.state,
-        latitude: parseFloat(stayData.latitude),
-        longitude: parseFloat(stayData.longitude),
+        latitude: parseFloat(stayData.latitude) || 0,
+        longitude: parseFloat(stayData.longitude) || 0,
         property_type: stayData.property_type || 'house'
       });
     } catch (error) {

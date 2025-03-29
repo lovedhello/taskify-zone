@@ -1,6 +1,6 @@
 
-// Update the host type to include phone property
-export interface FoodExperience {
+// Add or update stay type definitions
+export interface Stay {
   id: string;
   title: string;
   description: string;
@@ -9,10 +9,13 @@ export interface FoodExperience {
     order: number;
     is_primary?: boolean;
   }[];
-  price_per_person: number;
-  cuisine_type: string;
-  menu_description?: string;
+  price_per_night: number;
+  property_type: string;
   location_name: string;
+  max_guests: number;
+  bedrooms: number;
+  beds: number;
+  bathrooms: number;
   host: {
     id?: string;
     name: string;
@@ -21,13 +24,6 @@ export interface FoodExperience {
     reviews: number;
     phone?: string;
   };
-  details: {
-    duration: string;
-    groupSize: string;
-    includes: string[];
-    language: string;
-    location: string;
-  };
   coordinates?: {
     lat: number;
     lng: number;
@@ -35,8 +31,8 @@ export interface FoodExperience {
   amenities?: string[];
 }
 
-// Update types for HostFoodExperience in the host dashboard
-export interface HostFoodExperience {
+// Update the HostStay interface for the dashboard
+export interface HostStay {
   id: string | number;
   title: string;
   description: string;
@@ -47,17 +43,13 @@ export interface HostFoodExperience {
     order: number;
     is_primary: boolean;
   }[];
-  price_per_person: number;
-  cuisine_type: string;
-  menu_description: string;
+  price_per_night: number;
+  property_type: string;
   location_name: string;
+  max_guests: number;
+  bedrooms: number;
+  beds: number;
+  bathrooms: number;
   created_at: string;
   updated_at: string;
-  details: {
-    duration: string;
-    groupSize: string;
-    includes: string[];
-    language: string;
-    location: string;
-  };
 }

@@ -175,25 +175,19 @@ export const apiService = {
       }
 
       // Transform data to match our interface
-      const results = data.map(item => {
-        const imagePath = imagesByExperienceId.get(item.id);
-        const fullImageUrl = getFullImageUrl(imagePath, 'food');
-        console.log(`Experience ID: ${item.id}, Image path: ${imagePath}, Full URL: ${fullImageUrl}`);
-        
-        return {
-          id: item.id,
-          title: item.title,
-          description: item.description,
-          price_per_person: item.price_per_person,
-          image: fullImageUrl,
-          host: {
-            name: hostMap.get(item.host_id) || 'Host',
-            rating: item.rating || 4.8, 
-            reviews: 12  // Default or fetch from reviews table
-          }
-        };
-      });
-      
+      const results = data.map(item => ({
+        id: item.id.toString(),  // Ensure id is converted to string
+        title: item.title,
+        description: item.description,
+        price_per_person: parseFloat(item.price_per_person) || 0,
+        image: getFullImageUrl(imagesByExperienceId.get(item.id), 'food'),
+        host: {
+          name: hostMap.get(item.host_id) || 'Host',
+          rating: item.rating || 4.8, 
+          reviews: 12  // Default or fetch from reviews table
+        }
+      })) as FeaturedItem[];
+
       // Update cache
       apiCache.featuredFood = {
         data: results,

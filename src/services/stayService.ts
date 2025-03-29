@@ -394,26 +394,17 @@ export const stayService = {
         // Find primary image or use the first one
         const primaryImage = stayImages.find(img => img.is_primary) || stayImages[0];
         
-        // Parse amenities - handle cases where it might be a string, array, or null
-        let amenitiesArray: string[] = [];
-        if (stayData.amenities) {
-          if (Array.isArray(stayData.amenities)) {
-            amenitiesArray = stayData.amenities;
-          } else if (typeof stayData.amenities === 'string') {
-            try {
-              // Try parsing if it's a JSON string
-              const parsed = JSON.parse(stayData.amenities);
-              amenitiesArray = Array.isArray(parsed) ? parsed : [];
-            } catch (e) {
-              // If not valid JSON, split by comma if it's a comma-separated string
-              amenitiesArray = stayData.amenities.split(',').map(item => item.trim());
-            }
-          }
-        }
+        // Check if we have amenities from the stay_amenities relationship
+        const stayAmenities = Array.isArray(stayData.stay_amenities) ? stayData.stay_amenities : [];
+        
+        // Extract amenity names from the nested join
+        const amenities = stayAmenities.map(item => 
+          item.amenity?.name || ''
+        ).filter(Boolean);
         
         // Default amenities if none are provided
-        if (amenitiesArray.length === 0) {
-          amenitiesArray = ['Wi-Fi', 'Kitchen'];
+        if (amenities.length === 0) {
+          amenities = ['Wi-Fi', 'Kitchen'];
         }
         
         // Process the images
@@ -455,7 +446,7 @@ export const stayService = {
             beds: stayData.beds || 1,
             bathrooms: stayData.bathrooms || 1,
             maxGuests: stayData.max_guests || 2,
-            amenities: amenitiesArray,
+            amenities: amenities,
             location: stayData.location_name || 'Unknown location',
             propertyType: stayData.property_type || 'apartment'
           },
@@ -538,17 +529,13 @@ export const stayService = {
       const stayAmenities = Array.isArray(data.stay_amenities) ? data.stay_amenities : [];
       
       // Extract amenity names from the nested join
-      let amenitiesArray: string[] = [];
-      if (stayAmenities && stayAmenities.length > 0) {
-        // Extract amenity names from the nested join
-        amenitiesArray = stayAmenities
-          .filter(item => item.amenities && item.amenities.name) // Only include valid entries
-          .map(item => item.amenities.name);
-      }
+      const amenities = stayAmenities.map(item => 
+        item.amenity?.name || ''
+      ).filter(Boolean);
       
       // Default amenities if none are provided
-      if (amenitiesArray.length === 0) {
-        amenitiesArray = ['Wi-Fi', 'Kitchen'];
+      if (amenities.length === 0) {
+        amenities = ['Wi-Fi', 'Kitchen'];
       }
       
       // Log the stay images to help with debugging
@@ -594,7 +581,7 @@ export const stayService = {
           beds: data.beds || 1,
           bathrooms: data.bathrooms || 1,
           maxGuests: data.max_guests || 2,
-          amenities: amenitiesArray,
+          amenities: amenities,
           location: data.location_name || 'Unknown location',
           propertyType: data.property_type || 'apartment'
         },
@@ -670,29 +657,23 @@ export const stayService = {
         // Find primary image or use the first one
         const primaryImage = stayImages.find(img => img.is_primary) || stayImages[0];
         
-        // Parse amenities - handle cases where it might be a string, array, or null
-        let amenitiesArray: string[] = [];
-        if (stayData.amenities) {
-          if (Array.isArray(stayData.amenities)) {
-            amenitiesArray = stayData.amenities;
-          } else if (typeof stayData.amenities === 'string') {
-            try {
-              // Try parsing if it's a JSON string
-              const parsed = JSON.parse(stayData.amenities);
-              amenitiesArray = Array.isArray(parsed) ? parsed : [];
-            } catch (e) {
-              // If not valid JSON, split by comma if it's a comma-separated string
-              amenitiesArray = stayData.amenities.split(',').map(item => item.trim());
-            }
-          }
-        }
+        // Check if we have amenities from the stay_amenities relationship
+        const stayAmenities = Array.isArray(stayData.stay_amenities) ? stayData.stay_amenities : [];
+        
+        // Extract amenity names from the nested join
+        const amenities = stayAmenities.map(item => 
+          item.amenity?.name || ''
+        ).filter(Boolean);
         
         // Default amenities if none are provided
-        if (amenitiesArray.length === 0) {
-          amenitiesArray = ['Wi-Fi', 'Kitchen'];
+        if (amenities.length === 0) {
+          amenities = ['Wi-Fi', 'Kitchen'];
         }
         
-        // Process the image URLs into our desired format
+        // Log the stay images to help with debugging
+        console.log('Stay images found:', stayImages);
+        
+        // Process the images
         const processedImages = stayImages
           .map(img => ({
             url: getFullImageUrl(img.image_path),
@@ -729,7 +710,7 @@ export const stayService = {
             beds: stayData.beds || 1,
             bathrooms: stayData.bathrooms || 1,
             maxGuests: stayData.max_guests || 2,
-            amenities: amenitiesArray,
+            amenities: amenities,
             location: stayData.location_name || 'Unknown location',
             propertyType: stayData.property_type || 'apartment'
           },
@@ -821,4 +802,4 @@ export const stayService = {
   }
 };
 
-export default stayService; 
+export default stayService;
