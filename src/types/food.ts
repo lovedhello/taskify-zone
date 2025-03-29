@@ -10,6 +10,7 @@ export interface FoodExperience {
   amenities?: string[];
   zipcode?: string;
   host: {
+    id?: string;
     name: string;
     image: string;
     rating: number;

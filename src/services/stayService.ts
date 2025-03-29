@@ -10,11 +10,13 @@ export interface Stay {
   images: { url: string; order?: number }[];
   price_per_night: number;
   host: {
+    id?: string;
     name: string;
     image: string;
     rating: number;
     reviews: number;
   };
+  host_id: string;
   details: {
     bedrooms: number;
     beds: number;
@@ -127,11 +129,13 @@ const mockStays: Stay[] = [
     ],
     price_per_night: 249,
     host: {
+      id: "sarah123",
       name: "Sarah",
       image: "/images/avatars/sarah.jpg",
       rating: 4.9,
       reviews: 84
     },
+    host_id: "sarah",
     details: {
       bedrooms: 3,
       beds: 4,
@@ -158,11 +162,13 @@ const mockStays: Stay[] = [
     ],
     price_per_night: 179,
     host: {
+      id: "michael456",
       name: "Michael",
       image: "/images/avatars/michael.jpg",
       rating: 4.8,
       reviews: 62
     },
+    host_id: "michael",
     details: {
       bedrooms: 2,
       beds: 3,
@@ -189,11 +195,13 @@ const mockStays: Stay[] = [
     ],
     price_per_night: 155,
     host: {
+      id: "jennifer789",
       name: "Jennifer",
       image: "/images/avatars/jennifer.jpg",
       rating: 4.7,
       reviews: 93
     },
+    host_id: "jennifer",
     details: {
       bedrooms: 1,
       beds: 1,
@@ -224,6 +232,7 @@ const mockStays: Stay[] = [
       rating: 4.6,
       reviews: 47
     },
+    host_id: "david",
     details: {
       bedrooms: 1,
       beds: 1,
@@ -255,6 +264,7 @@ const mockStays: Stay[] = [
       rating: 4.9,
       reviews: 71
     },
+    host_id: "emma",
     details: {
       bedrooms: 2,
       beds: 2,
@@ -433,11 +443,13 @@ export const stayService = {
             ? getFullImageUrl(primaryImage?.image_path || '') 
             : processedImages[0].url,
           host: {
+            id: stayData.host_id,
             name: userProfile.name || 'Host',
             image: getFullImageUrl(userProfile.avatar_url || ''),
             rating: parseFloat(averageRating.toFixed(1)),
             reviews: stayReviews.length || Math.floor(Math.random() * 50) + 10
           },
+          host_id: stayData.host_id,
           details: {
             bedrooms: stayData.bedrooms || 1,
             beds: stayData.beds || 1,
@@ -570,11 +582,13 @@ export const stayService = {
           ? getFullImageUrl(primaryImage?.image_path || '') 
           : processedImages[0].url,
         host: {
+          id: data.host_id,
           name: userProfile.name || 'Host',
           image: getFullImageUrl(userProfile.avatar_url || ''),
           rating: parseFloat(averageRating.toFixed(1)),
           reviews: stayReviews.length || Math.floor(Math.random() * 50) + 10
         },
+        host_id: data.host_id,
         details: {
           bedrooms: data.bedrooms || 1,
           beds: data.beds || 1,
@@ -709,6 +723,7 @@ export const stayService = {
             rating: parseFloat(averageRating.toFixed(1)),
             reviews: stayReviews.length || Math.floor(Math.random() * 50) + 10
           },
+          host_id: stayData.host_id,
           details: {
             bedrooms: stayData.bedrooms || 1,
             beds: stayData.beds || 1,

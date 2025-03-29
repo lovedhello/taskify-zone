@@ -37,6 +37,7 @@ import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useLoadScript, GoogleMap, MarkerF, Libraries } from '@react-google-maps/api';
 import { stayService, type Stay } from "@/services/stayService";
 import { useAuth } from "@/contexts/AuthContext";
+import { ChatButton } from '@/components/chat/ChatButton';
 
 // Define libraries as a constant outside the component to prevent re-creation on each render
 const mapLibraries: Libraries = ['places'];
@@ -398,14 +399,25 @@ const StayDetails = () => {
                   </p>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Button variant="default" className="w-full">
-                      <MessageCircle className="w-4 h-4 mr-2" />
+                    {console.log('Current stay host data:', {
+                      host: stay.host,
+                      hostKeys: Object.keys(stay.host)
+                    })}
+                    <ChatButton
+                      hostId={stay.host.id || ''}
+                      listingId={id || ''}
+                      listingType="stay"
+                      listingTitle={stay.title}
+                      className="w-full"
+                    >
                       Message Host
-                    </Button>
-                    <Button variant="outline" className="w-full">
-                      <Phone className="w-4 h-4 mr-2" />
-                      Call Host
-                    </Button>
+                    </ChatButton>
+                    <a href={`tel:${stay.host.phone || ''}`}>
+                      <Button variant="outline" className="w-full">
+                        <Phone className="w-4 h-4 mr-2" />
+                        Call Host
+                      </Button>
+                    </a>
                   </div>
                 </Card>
               </TabsContent>

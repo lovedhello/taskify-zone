@@ -86,6 +86,7 @@ export async function getFoodExperiences(filters: Record<string, any> = {}) {
 
       // Format host data - basic info if not available
       const host = {
+        id: experience.host_id,
         name: experience.host?.name || 'Host',
         image: experience.host?.avatar_url || '/default-avatar.png',
         rating: 4.5, // Default value, would ideally be calculated from reviews
@@ -189,6 +190,7 @@ export async function getFoodExperienceById(id: string) {
     location_name: data.location_name,
     amenities: amenities,
     host: {
+      id: data.host?.id,
       name: data.host?.name || 'Host',
       image: data.host?.avatar_url || '',
       rating: parseFloat(averageRating.toFixed(1)),

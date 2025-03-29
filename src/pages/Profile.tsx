@@ -383,48 +383,90 @@ const Profile = () => {
       const fileName = `${Math.random().toString(36).substring(2)}`;
       const filePath = `${user.id}/${fileName}.${fileExt}`;
 
-      // Check if bucket exists, if not create it
-      const { error: bucketError } = await supabase.storage
-        .createBucket('user-profiles', {
-          public: true,
-          fileSizeLimit: 5242880 // 5MB
-        });
+      // First, check if the bucket exists
+      const { data: buckets } = await supabase.storage.listBuckets();
+      const bucketExists = buckets?.some(bucket => bucket.name === 'user-profiles');
+      
+      // Only create bucket if it doesn't exist
+      if (!bucketExists) {
+        try {
+          await supabase.storage.createBucket('user-profiles', {
+            public: true,
+            fileSizeLimit: 5242880 // 5MB
+          });
+        } catch (bucketError) {
+          console.log('Bucket may already exist, continuing:', bucketError);
+          // Continue anyway as the bucket might exist but not be visible to this user
+        }
+      }
 
       // Upload file to user-profiles bucket
-      const { error: uploadError } = await supabase.storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('user-profiles')
-        .upload(filePath, file);
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true // Use upsert to prevent conflicts
+        });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
 
-      // Get public URL
+      // Get public URL - ensure we're not duplicating the bucket name
       const { data } = supabase.storage
         .from('user-profiles')
         .getPublicUrl(filePath);
 
       if (data?.publicUrl) {
-        // Update user metadata with new picture URL
-        await supabase.auth.updateUser({
-          data: { picture: data.publicUrl }
-        });
-
-        // Update profiles table
-        await supabase
+        const avatarUrl = data.publicUrl;
+        
+        // 1. Update profiles table first (source of truth)
+        const { error: updateError } = await supabase
           .from('profiles')
-          .update({ avatar_url: data.publicUrl })
+          .update({ 
+            avatar_url: avatarUrl,
+            updated_at: new Date().toISOString() 
+          })
           .eq('id', user.id);
-
-        // Refresh user data in context
+          
+        if (updateError) {
+          console.error('Profile update error:', updateError);
+          throw new Error(`Profile update failed: ${updateError.message}`);
+        }
+        
+        // 2. Update auth user metadata to keep in sync
+        const { error: userUpdateError } = await supabase.auth.updateUser({
+          data: { 
+            avatar_url: avatarUrl,
+            picture: avatarUrl
+          }
+        });
+        
+        if (userUpdateError) {
+          console.error('Auth update error:', userUpdateError);
+          // Continue anyway as the profile was updated
+        }
+        
+        // 3. Wait for changes to propagate
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // 4. Refresh user data
         await refreshUser();
+        
         toast.success('Profile picture updated successfully');
       }
     } catch (error: any) {
-      if (error.message.includes('duplicate')) {
-        toast.error('Error uploading image. Please try again.');
-      } else {
-        toast.error(error.message || 'Failed to update profile picture');
-      }
       console.error('Error uploading image:', error);
+      
+      if (error.message?.includes('row-level security policy') || 
+          error.message?.includes('Unauthorized')) {
+        toast.error('Permission denied. Please log out and log back in to update your profile.');
+      } else if (error.message?.includes('duplicate')) {
+        toast.error('Image already exists. Please try with a different image.');
+      } else {
+        toast.error('Failed to update profile picture. Please try again later.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -437,30 +479,50 @@ const Profile = () => {
     try {
       setIsLoading(true);
 
-      // Update user metadata with new name
-      await supabase.auth.updateUser({
-        data: { 
-          name: profileData.name,
-          full_name: profileData.name
-        }
-      });
-
-      // Update profiles table
-      await supabase
+      // 1. Update profiles table first (source of truth)
+      const { error: updateError } = await supabase
         .from('profiles')
         .update({ 
           name: profileData.name,
           updated_at: new Date().toISOString()
         })
         .eq('id', user.id);
-
-      // Refresh user data in context
+        
+      if (updateError) {
+        console.error('Profile update error:', updateError);
+        throw new Error(`Profile update failed: ${updateError.message}`);
+      }
+      
+      // 2. Update auth user metadata to keep in sync
+      const { error: userUpdateError } = await supabase.auth.updateUser({
+        data: { 
+          name: profileData.name,
+          full_name: profileData.name
+        }
+      });
+      
+      if (userUpdateError) {
+        console.error('Auth update error:', userUpdateError);
+        // Continue anyway as the profile was updated
+      }
+      
+      // 3. Wait for changes to propagate
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // 4. Refresh user data
       await refreshUser();
+      
       setIsEditing(false);
       toast.success('Profile updated successfully');
     } catch (error: any) {
-      toast.error(error.message || 'Failed to update profile');
       console.error('Error updating profile:', error);
+      
+      if (error.message?.includes('row-level security policy') || 
+          error.message?.includes('Unauthorized')) {
+        toast.error('Permission denied. Please log out and log back in to update your profile.');
+      } else {
+        toast.error('Failed to update profile. Please try again later.');
+      }
     } finally {
       setIsLoading(false);
     }

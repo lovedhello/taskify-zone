@@ -1,17 +1,11 @@
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { useEffect } from "react";
+import { memo } from "react";
 
-const Navigation = () => {
+// Using memo to prevent unnecessary re-renders 
+const Navigation = memo(() => {
   const { user, logout } = useAuth();
-  
-  console.log('Navigation rendering with user:', user); // Debug log
-
-  // Force re-render when user changes
-  useEffect(() => {
-    console.log('User changed in Navigation:', user);
-  }, [user]);
 
   return (
     <nav className="border-b">
@@ -24,7 +18,6 @@ const Navigation = () => {
           <div className="flex items-center space-x-4">
             {user ? (
               <>
-                {console.log('Rendering nav buttons, is_host:', user.is_host)}
                 {user.is_host ? (
                   <Link to="/host/dashboard">
                     <Button variant="outline">Host Dashboard</Button>
@@ -51,6 +44,8 @@ const Navigation = () => {
       </div>
     </nav>
   );
-};
+});
+
+Navigation.displayName = 'Navigation';
 
 export default Navigation; 

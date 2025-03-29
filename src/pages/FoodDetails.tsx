@@ -34,6 +34,7 @@ import {
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { useLoadScript, GoogleMap, MarkerF } from '@react-google-maps/api';
 import ReviewsSection from "@/components/reviews/ReviewsSection";
+import { ChatButton } from '@/components/chat/ChatButton';
 
 // Import our services
 import { getFoodExperienceById, isFoodExperienceFavorited, toggleFoodExperienceFavorite } from "@/services/foodExperienceService";
@@ -364,14 +365,21 @@ const FoodDetails = () => {
                   </p>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Button variant="default" className="w-full">
-                      <MessageCircle className="w-4 h-4 mr-2" />
+                    <ChatButton
+                      hostId={experience.host?.id}
+                      listingId={id || ''}
+                      listingType="food_experience"
+                      listingTitle={experience.title}
+                      className="w-full"
+                    >
                       Message Host
-                    </Button>
-                    <Button variant="outline" className="w-full">
-                      <Phone className="w-4 h-4 mr-2" />
-                      Call Host
-                    </Button>
+                    </ChatButton>
+                    <a href={`tel:${experience.host.phone || ''}`}>
+                      <Button variant="outline" className="w-full">
+                        <Phone className="w-4 h-4 mr-2" />
+                        Call Host
+                      </Button>
+                    </a>
                   </div>
                 </Card>
               </TabsContent>
@@ -500,15 +508,23 @@ const FoodDetails = () => {
               <Separator className="my-4" />
               
               <div className="grid grid-cols-1 gap-3">
-                <Button className="w-full" size="lg">
+                <ChatButton
+                  hostId={experience.host?.id}
+                  listingId={id || ''}
+                  listingType="food_experience"
+                  listingTitle={experience.title}
+                  variant="outline"
+                >
                   <MessageCircle className="w-4 h-4 mr-2" />
-                  Contact Host
-                </Button>
+                  Message Host
+                </ChatButton>
                 
-                <Button variant="outline" className="w-full">
-                  <Phone className="w-4 h-4 mr-2" />
-                  Call Host
-                </Button>
+                <a href={`tel:${experience.host.phone || ''}`}>
+                  <Button variant="outline" className="w-full">
+                    <Phone className="w-4 h-4 mr-2" />
+                    Call Host
+                  </Button>
+                </a>
               </div>
               
               <p className="text-center text-sm text-muted-foreground mt-4">

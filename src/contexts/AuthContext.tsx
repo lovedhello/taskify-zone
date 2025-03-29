@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, ReactNode, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { User, Session } from '@supabase/supabase-js';
 import { toast } from 'sonner';
@@ -12,6 +12,8 @@ interface AuthUser {
   id?: string;
   is_host?: boolean;
   provider: 'google' | 'email';
+  // New timestamp for caching
+  lastProfileCheck?: number;
 }
 
 interface AuthContextType {
@@ -25,6 +27,8 @@ interface AuthContextType {
   getAuthHeader: () => { Authorization: string } | undefined;
   refreshUser: () => Promise<void>;
   session: Session | null;
+  resetPassword: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
 }
 
 // Define the profile interface to match the database structure
@@ -38,6 +42,10 @@ interface Profile {
   is_admin?: boolean;
 }
 
+// Cache timing configurations
+const PROFILE_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+const AUTH_STATE_DEBOUNCE = 1000; // 1 second
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -45,6 +53,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
+  
+  // Refs for debouncing and preventing duplicate requests
+  const authStateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const processingAuthChangeRef = useRef(false);
+  
+  // Cache for profile data
+  const profileCache = useRef<Record<string, { profile: Profile; timestamp: number }>>({});
 
   const getAuthHeader = () => {
     if (session?.access_token) {
@@ -61,43 +76,89 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       name: supabaseUser.user_metadata.name || supabaseUser.user_metadata.full_name || '',
       picture: supabaseUser.user_metadata.picture || supabaseUser.user_metadata.avatar_url,
       is_host: supabaseUser.user_metadata.is_host || false,
-      provider: supabaseUser.app_metadata.provider === 'google' ? 'google' : 'email'
+      provider: supabaseUser.app_metadata.provider === 'google' ? 'google' : 'email',
+      lastProfileCheck: Date.now()
     };
   };
 
-  useEffect(() => {
-    // Set up the auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, currentSession) => {
-        console.log('Auth state changed:', event);
-        // Only do synchronous updates to prevent potential deadlocks
-        setSession(currentSession);
-        
-        if (currentSession?.user) {
+  // Debounced function to handle auth state changes
+  const handleAuthStateChange = (currentSession: Session | null) => {
+    // Clear any existing timeout
+    if (authStateTimeoutRef.current) {
+      clearTimeout(authStateTimeoutRef.current);
+    }
+    
+    // If already processing a change, don't schedule another one
+    if (processingAuthChangeRef.current) {
+      return;
+    }
+    
+    // Set a timeout to debounce multiple rapid auth state changes
+    authStateTimeoutRef.current = setTimeout(() => {
+      processingAuthChangeRef.current = true;
+      
+      if (currentSession?.user) {
+        // Only update if we don't have a user or if the user ID changed
+        if (!user || user.id !== currentSession.user.id) {
           const userData = extractUserData(currentSession.user);
           setUser(userData);
           setIsAuthenticated(true);
-        } else {
-          setUser(null);
-          setIsAuthenticated(false);
+          setSession(currentSession);
+        }
+      } else {
+        setUser(null);
+        setIsAuthenticated(false);
+        setSession(null);
+      }
+      
+      processingAuthChangeRef.current = false;
+    }, AUTH_STATE_DEBOUNCE);
+  };
+
+  useEffect(() => {
+    let mounted = true;
+
+    // Initialize auth state
+    const initializeAuth = async () => {
+      try {
+        // Get the current session
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        
+        if (mounted && currentSession?.user) {
+          const userData = extractUserData(currentSession.user);
+          setUser(userData);
+          setIsAuthenticated(true);
+          setSession(currentSession);
+        }
+      } catch (error) {
+        console.error('Error initializing auth:', error);
+      } finally {
+        if (mounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    // Set up the auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, currentSession) => {
+        console.log('Auth state changed:', event);
+        
+        if (mounted) {
+          handleAuthStateChange(currentSession);
         }
       }
     );
 
-    // THEN check for an existing session
-    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
-      setSession(currentSession);
-      
-      if (currentSession?.user) {
-        const userData = extractUserData(currentSession.user);
-        setUser(userData);
-        setIsAuthenticated(true);
-      }
-      
-      setLoading(false);
-    });
+    // Initialize auth
+    initializeAuth();
 
     return () => {
+      mounted = false;
+      // Clean up timeout and subscription
+      if (authStateTimeoutRef.current) {
+        clearTimeout(authStateTimeoutRef.current);
+      }
       subscription.unsubscribe();
     };
   }, []);
@@ -164,6 +225,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(null);
       setIsAuthenticated(false);
       
+      // Clear the profile cache
+      profileCache.current = {};
+      
       toast.success('Successfully signed out!');
     } catch (error: any) {
       console.error('Logout error:', error);
@@ -175,39 +239,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       if (!session?.user) return;
       
-      // Refresh the user data from Supabase
-      const { data, error } = await supabase.auth.getUser();
+      const userId = session.user.id;
+      const now = Date.now();
       
-      if (error) {
-        console.error('Error refreshing user data:', error);
-        return;
-      }
-      
-      if (data?.user) {
-        // Get user data from auth
-        const userData = extractUserData(data.user);
-        
-        // Also check the profiles table for accurate is_host status
-        const { data: profile, error: profileError } = await supabase
-          .from('profiles')
-          .select('is_host')
-          .eq('id', data.user.id)
-          .single();
+      // Get fresh profile data from the database
+      console.log('Fetching fresh profile data');
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .single();
           
-        if (!profileError && profile) {
-          // Update is_host from the profiles table (source of truth)
-          userData.is_host = profile.is_host;
-          
-          // Also update the user metadata if it's different to keep in sync
-          if (profile.is_host !== data.user.user_metadata.is_host) {
-            console.log('Updating user metadata with is_host:', profile.is_host);
-            await supabase.auth.updateUser({
-              data: { is_host: profile.is_host }
-            });
-          }
-        }
+      if (!profileError && profile) {
+        // Update user data with profile data
+        const updatedUserData: AuthUser = {
+          ...user!,
+          is_host: profile.is_host,
+          name: profile.name,
+          picture: profile.avatar_url,
+          lastProfileCheck: now
+        };
         
-        setUser(userData);
+        // Cache the profile data
+        profileCache.current[userId] = {
+          profile: profile as Profile,
+          timestamp: now
+        };
+        
+        // Update local state without affecting the session
+        setUser(updatedUserData);
       }
     } catch (error) {
       console.error('Error refreshing user data:', error);
@@ -217,6 +277,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const setUserAndPersist = (newUser: AuthUser | null) => {
     setUser(newUser);
     setIsAuthenticated(!!newUser);
+  };
+
+  const resetPassword = async (email: string) => {
+    try {
+      // Use Supabase's password reset functionality
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) throw error;
+      
+      toast.success('Password reset email sent! Check your inbox.');
+    } catch (error: any) {
+      console.error('Password reset error:', error);
+      toast.error(error.message || 'Failed to send reset email');
+      throw error;
+    }
+  };
+
+  const updatePassword = async (newPassword: string) => {
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) throw error;
+      
+      toast.success('Password updated successfully!');
+    } catch (error: any) {
+      console.error('Password update error:', error);
+      toast.error(error.message || 'Failed to update password');
+      throw error;
+    }
   };
 
   return (
@@ -230,7 +323,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       getAuthHeader, 
       logout,
       refreshUser,
-      session
+      session,
+      resetPassword,
+      updatePassword
     }}>
       {children}
     </AuthContext.Provider>
