@@ -94,15 +94,18 @@ const Food = () => {
       filters.cuisine_types = cuisineTypesParam.split(',');
     }
 
-    fetchExperiences(filters);
-  }, [searchParams, sortBy]);
-
-  // Add effect to trigger search when selectedCuisines changes
-  useEffect(() => {
-    if (selectedCuisines.length > 0) {
-      handleSearch();
+    // Add title search if present
+    if (searchTitle.trim()) {
+      filters.title = searchTitle.trim();
     }
-  }, [selectedCuisines]);
+    
+    // Add cuisine types if selected
+    if (selectedCuisines.length > 0) {
+      filters.cuisine_types = selectedCuisines;
+    }
+
+    fetchExperiences(filters);
+  }, [searchParams, sortBy, searchTitle, selectedCuisines]);
 
   const fetchExperiences = async (filters = {}) => {
     try {
@@ -128,30 +131,6 @@ const Food = () => {
     }
   };
 
-  const handleSearch = () => {
-    const filters: Record<string, any> = {
-      sort: sortBy
-    };
-
-    // Add title search if present
-    if (searchTitle.trim()) {
-      filters.title = searchTitle.trim();
-    }
-
-    // Add cuisine types if selected
-    if (selectedCuisines.length > 0) {
-      filters.cuisine_types = selectedCuisines;
-    }
-
-    // Add zipcode from URL if present
-    const zipcode = searchParams.get('zipcode');
-    if (zipcode) {
-      filters.zipcode = zipcode;
-    }
-
-    fetchExperiences(filters);
-  };
-
   const handleCuisineChange = (cuisineId: string) => {
     setSelectedCuisines(prev => {
       if (prev.includes(cuisineId)) {
@@ -165,7 +144,6 @@ const Food = () => {
   const handleReset = () => {
     setSearchTitle("");
     setSelectedCuisines([]);
-    fetchExperiences({ sort: sortBy });
   };
 
   const toggleFilters = () => {
@@ -193,21 +171,13 @@ const Food = () => {
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-5 w-5" />
               </div>
             </div>
-            <div className="flex gap-2">
-              <Button 
-                onClick={handleSearch} 
-                className="h-12 px-6 rounded-lg font-medium"
-              >
-                Search
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={toggleFilters} 
-                className="h-12 px-4 rounded-lg md:hidden"
-              >
-                <Filter className="h-5 w-5" />
-              </Button>
-            </div>
+            <Button 
+              variant="outline" 
+              onClick={toggleFilters} 
+              className="h-12 px-4 rounded-lg md:hidden"
+            >
+              <Filter className="h-5 w-5" />
+            </Button>
           </div>
         </div>
 
@@ -249,24 +219,51 @@ const Food = () => {
                 Close
               </Button>
             </div>
-            <FilterSidebar
-              title="Filter Food Experiences"
-              categories={cuisineCounts}
-              selectedCategories={selectedCuisines}
-              onCategoryChange={handleCuisineChange}
-              onReset={handleReset}
-              type="food"
-              showPriceFilter={false}
-              sortComponent={
-                <div className="mb-6">
-                  <h3 className="text-sm font-medium mb-2">Sort By</h3>
-                  <SortSelect
-                    value={sortBy}
-                    onValueChange={(value) => setSortBy(value)}
-                  />
+            <div className="bg-white p-6 rounded-lg border shadow-sm">
+              <div className="mb-6">
+                <h2 className="text-xl font-semibold">Filter Food Experiences</h2>
+              </div>
+              
+              <div className="mb-6">
+                <h3 className="text-sm font-medium mb-2">Sort By</h3>
+                <SortSelect
+                  value={sortBy}
+                  onValueChange={(value) => setSortBy(value)}
+                />
+              </div>
+              
+              <div className="mb-6">
+                <h3 className="text-sm font-medium mb-3">Categories</h3>
+                <div className="space-y-2">
+                  {cuisineCounts.map(cuisine => (
+                    <div key={cuisine.id} className="flex items-center justify-between">
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          id={`cuisine-${cuisine.id}`}
+                          checked={selectedCuisines.includes(cuisine.id)}
+                          onChange={() => handleCuisineChange(cuisine.id)}
+                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                        <label htmlFor={`cuisine-${cuisine.id}`} className="ml-2 text-sm text-gray-700">
+                          {cuisine.label}
+                        </label>
+                      </div>
+                      <span className="text-xs text-gray-500">({cuisine.count})</span>
+                    </div>
+                  ))}
                 </div>
-              }
-            />
+              </div>
+              
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleReset}
+                className="w-full text-sm mt-4"
+              >
+                Reset
+              </Button>
+            </div>
           </div>
 
           {/* Listings Section */}

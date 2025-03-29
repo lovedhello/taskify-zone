@@ -42,7 +42,7 @@ import { getAverageRating, getReviewCount } from "@/services/reviewService";
 import type { FoodExperience } from "@/types/food";
 
 // Define libraries as a constant to prevent reloading
-const libraries = ['places'] as const;
+const libraries: ['places'] = ['places'];
 
 // Create a centralized Google Maps API key
 const GOOGLE_MAPS_API_KEY = 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE';
@@ -225,71 +225,15 @@ const FoodDetails = () => {
         </div>
 
         <div className="mb-12">
-          {experience.images.length > 0 && (
-            <div className="relative" ref={imageContainerRef}>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 rounded-xl overflow-hidden max-h-[400px]">
-                <div className="col-span-2 aspect-video relative overflow-hidden rounded-lg">
-                  <img
-                    src={experience.images[0].url}
-                    alt={`${experience.title} - Main Image`}
-                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                    onClick={() => openImageDialog(0)}
-                    loading="lazy"
-                    style={{ objectPosition: 'center' }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/30 to-transparent opacity-0 hover:opacity-100 transition-opacity duration-300 flex items-end justify-start p-4">
-                    <Button variant="secondary" size="sm" onClick={() => openImageDialog(0)}>
-                      <ImageIcon className="w-4 h-4 mr-2" />
-                      View All Photos
-                    </Button>
-                  </div>
-                </div>
-                
-                <div className="hidden md:grid grid-rows-2 gap-2">
-                  {experience.images.slice(1, 3).map((image, index) => (
-                    <div key={index} className="relative overflow-hidden rounded-lg">
-                      <img
-                        src={image.url}
-                        alt={`${experience.title} - Image ${index + 2}`}
-                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
-                        onClick={() => openImageDialog(index + 1)}
-                        loading="lazy"
-                        style={{ objectPosition: 'center' }}
-                      />
-                      {index === 1 && experience.images.length > 3 && (
-                        <div 
-                          className="absolute inset-0 bg-black/50 flex items-center justify-center cursor-pointer"
-                          onClick={() => openImageDialog(0)}
-                        >
-                          <div className="text-white text-center">
-                            <span className="text-xl font-bold">+{experience.images.length - 3}</span>
-                            <p className="text-sm">more photos</p>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              <Dialog open={isImageDialogOpen} onOpenChange={setIsImageDialogOpen}>
-                <DialogContent className="max-w-5xl w-full p-0 bg-black/90">
-                  <div className="relative h-[80vh]">
-                    <ImageGallery 
-                      images={experience.images} 
-                    />
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="absolute top-2 right-2 text-white bg-black/50 hover:bg-black/70"
-                      onClick={() => setIsImageDialogOpen(false)}
-                    >
-                      ✕
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
-            </div>
+          {experience.images && experience.images.length > 0 && (
+            <ImageGallery
+              images={experience.images.map((img, index) => ({
+                url: img.url,
+                order: index,
+                caption: `${experience.title} - Image ${index + 1}`
+              }))}
+              initialIndex={selectedImageIndex}
+            />
           )}
         </div>
 
@@ -532,28 +476,7 @@ const FoodDetails = () => {
               </p>
             </Card>
             
-            <Card className="p-6 bg-white border shadow-md rounded-lg mt-auto">
-              <div className="flex items-center gap-4">
-                <Avatar className="w-12 h-12">
-                  <AvatarImage src={experience.host.image} alt={experience.host.name} />
-                  <AvatarFallback>{experience.host.name.charAt(0)}</AvatarFallback>
-                </Avatar>
-                <div>
-                  <h3 className="font-semibold">Hosted by {experience.host.name}</h3>
-                  <div className="flex items-center text-sm text-muted-foreground">
-                    <Star className="w-4 h-4 text-yellow-500 fill-yellow-500 mr-1" />
-                    <span>{experience.host.rating}</span>
-                    <span className="ml-1">
-                      ({experience.host.reviews} reviews)
-                    </span>
-                  </div>
-                </div>
-              </div>
-              
-              <Button variant="link" className="w-full mt-4 p-0">
-                View host profile
-              </Button>
-            </Card>
+            
           </div>
         </div>
       </div>

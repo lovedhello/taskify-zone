@@ -1,4 +1,3 @@
-
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -63,8 +62,11 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
               <Menu className="h-6 w-6" />
             </Button>
 
-            <div className="flex items-center space-x-4">
+            <div className="hidden md:flex flex-1 justify-center mx-4">
               <NavbarSearch />
+            </div>
+
+            <div className="flex items-center">
               <nav className="hidden md:flex items-center space-x-6">
                 <Link 
                   to="/food" 
@@ -152,6 +154,9 @@ const MainLayout = ({ children }: { children: React.ReactNode }) => {
           {/* Mobile Menu */}
           {isMobileMenuOpen && (
             <div className="md:hidden flex flex-col space-y-4 pt-4 mt-4 border-t animate-fadeIn">
+              <div className="mb-2">
+                <NavbarSearch />
+              </div>
               <Link to="/food" className="flex items-center gap-2 p-2 rounded-lg hover:bg-accent">
                 <Utensils className="w-4 h-4" />
                 Local Food
