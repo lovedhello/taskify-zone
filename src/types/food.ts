@@ -1,3 +1,4 @@
+
 export interface FoodExperience {
   id: string | number;
   title: string;
@@ -15,6 +16,7 @@ export interface FoodExperience {
     image: string;
     rating: number;
     reviews: number;
+    phone?: string; // Added missing phone property
   };
   details: {
     duration: string;

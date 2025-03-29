@@ -177,6 +177,18 @@ const StayDetails = () => {
     );
   }
 
+  const renderChatButton = () => (
+    <ChatButton
+      hostId={stay?.host?.id || ''}
+      listingId={id || ''}
+      listingType="stay"
+      listingTitle={stay?.title || ''}
+      className="w-full"
+    >
+      Message Host
+    </ChatButton>
+  );
+
   return (
     <MainLayout>
       <div className="container mx-auto px-4 py-8">
@@ -342,20 +354,8 @@ const StayDetails = () => {
                   </p>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {console.log('Current stay host data:', {
-                      host: stay.host,
-                      hostKeys: Object.keys(stay.host)
-                    })}
-                    <ChatButton
-                      hostId={stay.host.id || ''}
-                      listingId={id || ''}
-                      listingType="stay"
-                      listingTitle={stay.title}
-                      className="w-full"
-                    >
-                      Message Host
-                    </ChatButton>
-                    <a href={`tel:${stay.host.phone || ''}`}>
+                    {renderChatButton()}
+                    <a href={`tel:${stay?.host?.phone || ''}`}>
                       <Button variant="outline" className="w-full">
                         <Phone className="w-4 h-4 mr-2" />
                         Call Host
@@ -541,8 +541,6 @@ const StayDetails = () => {
                 You won't be charged yet
               </p>
             </Card>
-            
-            
           </div>
         </div>
       </div>
@@ -550,4 +548,4 @@ const StayDetails = () => {
   );
 };
 
-export default StayDetails; 
+export default StayDetails;

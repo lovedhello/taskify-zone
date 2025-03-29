@@ -5,12 +5,25 @@ import { supabase } from '../integrations/supabase/client';
 // Mock the Supabase client
 vi.mock('../integrations/supabase/client', () => ({
   supabase: {
-    from: vi.fn().mockReturnThis(),
-    select: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    limit: vi.fn().mockReturnThis(),
-    group: vi.fn().mockReturnThis(),
-    single: vi.fn()
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          limit: vi.fn(() => ({
+            data: [],
+            error: null
+          }))
+        })),
+        limit: vi.fn(() => ({
+          data: [],
+          error: null
+        })),
+        group: vi.fn(() => ({
+          data: [],
+          error: null
+        }))
+      })),
+      single: vi.fn()
+    }))
   }
 }));
 
@@ -33,28 +46,48 @@ describe('API Service', () => {
         }
       ];
 
-      (supabase.from as any).mockReturnThis();
-      (supabase.select as any).mockReturnThis();
-      (supabase.eq as any).mockReturnThis();
-      (supabase.limit as any).mockResolvedValue({ data: mockData, error: null });
-
+      const mockSupabaseResponse = {
+        data: mockData,
+        error: null
+      };
+      
+      const fromMock = vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            limit: vi.fn(() => mockSupabaseResponse)
+          }))
+        }))
+      }));
+      
+      (supabase.from as any) = fromMock;
+      
       const result = await apiService.getFeaturedFood();
 
-      expect(supabase.from).toHaveBeenCalledWith('food_experiences');
+      expect(fromMock).toHaveBeenCalledWith('food_experiences');
       expect(result).toHaveLength(1);
       expect(result[0].title).toBe('Italian Pasta Making');
     });
 
     it('should return mock data when Supabase query fails', async () => {
       // Mock Supabase error
-      (supabase.from as any).mockReturnThis();
-      (supabase.select as any).mockReturnThis();
-      (supabase.eq as any).mockReturnThis();
-      (supabase.limit as any).mockResolvedValue({ data: null, error: { message: 'Table does not exist' } });
-
+      const mockSupabaseResponse = {
+        data: null,
+        error: { message: 'Table does not exist' }
+      };
+      
+      const fromMock = vi.fn(() => ({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({
+            limit: vi.fn(() => mockSupabaseResponse)
+          }))
+        }))
+      }));
+      
+      (supabase.from as any) = fromMock;
+      
       const result = await apiService.getFeaturedFood();
 
-      expect(supabase.from).toHaveBeenCalledWith('food_experiences');
+      expect(fromMock).toHaveBeenCalledWith('food_experiences');
       expect(result).toHaveLength(3); // Mock data has 3 items
       expect(result[0].title).toBe('Authentic Italian Pasta Making'); // First mock item
     });
@@ -108,4 +141,4 @@ describe('API Service', () => {
       expect(result[0].count).toBe(10);
     });
   });
-}); 
+});

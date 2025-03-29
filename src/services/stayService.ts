@@ -477,48 +477,44 @@ export const stayService = {
   },
   
   // Get a specific stay by ID
-  async getStayById(id: string): Promise<Stay | null> {
+  async getStayById(stayId: string) {
     try {
-      console.log(`Fetching stay with ID: ${id}`);
-      
-      // Try to fetch from Supabase
       const { data, error } = await supabase
         .from('stays')
         .select(`
-          id, 
-          title, 
-          description, 
-          price_per_night,
-          status,
-          property_type,
-          bedrooms,
-          beds,
-          bathrooms,
-          max_guests,
-          amenities,
-          location_name,
-          zipcode,
-          latitude,
-          longitude,
-          host_id,
-          host:profiles!host_id(id, name, avatar_url),
-          stay_images:stay_images(id, image_path, is_primary, display_order),
-          stay_reviews:stay_reviews(id, rating, comment, user_id, created_at),
-          stay_amenities:stay_amenities(amenity_id, amenities:amenities(id, name))
+          *,
+          stay_images(*),
+          stay_reviews(*),
+          stay_amenities(*)
         `)
-        .eq('id', id)
+        .eq('id', stayId)
         .single();
-      
-      if (error) {
-        console.error('Error fetching stay:', error);
-        throw new Error(`Failed to fetch stay with ID: ${id}`);
-      }
+
+      if (error) throw error;
       
       if (!data) {
-        console.log(`Stay with ID ${id} not found`);
         return null;
       }
-      
+
+      // Process the stay amenities rather than accessing direct amenities property
+      let amenitiesList: string[] = [];
+      if (data.stay_amenities && Array.isArray(data.stay_amenities)) {
+        // Extract amenity IDs from stay_amenities
+        const amenityIds = data.stay_amenities.map((item: any) => item.amenity_id);
+        
+        if (amenityIds.length > 0) {
+          // Fetch the actual amenity names
+          const { data: amenitiesData } = await supabase
+            .from('amenities')
+            .select('*')
+            .in('id', amenityIds);
+            
+          if (amenitiesData) {
+            amenitiesList = amenitiesData.map((a: any) => a.name);
+          }
+        }
+      }
+
       // Get the host profile data - using type assertion to help TypeScript
       const hostProfile = data.host as UserProfile;
       const userProfile = hostProfile || { name: 'Host', avatar_url: '' };
@@ -534,35 +530,15 @@ export const stayService = {
       // Find primary image or use the first one
       const primaryImage = stayImages.find(img => img.is_primary) || stayImages[0];
       
-      // Check if we have amenities from the stay_amenities relationship
-      const stayAmenities = Array.isArray(data.stay_amenities) ? data.stay_amenities : [];
-      
-      // Extract amenity names from the nested join
-      let amenitiesArray: string[] = [];
-      if (stayAmenities && stayAmenities.length > 0) {
-        // Extract amenity names from the nested join
-        amenitiesArray = stayAmenities
-          .filter(item => item.amenities && item.amenities.name) // Only include valid entries
-          .map(item => item.amenities.name);
-      }
-      
-      // Default amenities if none are provided
-      if (amenitiesArray.length === 0) {
-        amenitiesArray = ['Wi-Fi', 'Kitchen'];
-      }
-      
-      // Log the stay images to help with debugging
-      console.log('Stay images found:', stayImages);
-      
-      // Process the images
+      // Process the image URLs into our desired format
       const processedImages = stayImages
         .map(img => ({
           url: getFullImageUrl(img.image_path),
           order: img.display_order || 0
         }))
         .sort((a, b) => (a.order || 0) - (b.order || 0));
-      
-      // If no images are found, add a placeholder
+          
+      // If no images are found, add a placeholder image
       if (processedImages.length === 0) {
         processedImages.push({
           url: '/images/mountain.jpg',
@@ -570,31 +546,15 @@ export const stayService = {
         });
       }
       
-      // Transform data to match our interface
-      const transformedData = {
-        id: data.id,
-        title: data.title,
-        description: data.description,
-        price_per_night: data.price_per_night,
-        status: data.status,
+      return {
+        ...data,
         images: processedImages,
-        image: stayImages.length > 0 
-          ? getFullImageUrl(primaryImage?.image_path || '') 
-          : processedImages[0].url,
-        host: {
-          id: data.host_id,
-          name: userProfile.name || 'Host',
-          image: getFullImageUrl(userProfile.avatar_url || ''),
-          rating: parseFloat(averageRating.toFixed(1)),
-          reviews: stayReviews.length || Math.floor(Math.random() * 50) + 10
-        },
-        host_id: data.host_id,
         details: {
           bedrooms: data.bedrooms || 1,
           beds: data.beds || 1,
           bathrooms: data.bathrooms || 1,
           maxGuests: data.max_guests || 2,
-          amenities: amenitiesArray,
+          amenities: amenitiesList, // Use the processed amenities list
           location: data.location_name || 'Unknown location',
           propertyType: data.property_type || 'apartment'
         },
@@ -602,15 +562,12 @@ export const stayService = {
           lat: data.latitude || 0,
           lng: data.longitude || 0
         },
-        // Generate availability for now - will be replaced with real data later
         availability: generateAvailability(data.price_per_night)
       };
-      
-      console.log(`Successfully fetched stay with ID: ${id}`);
-      return transformedData;
+
     } catch (error) {
-      console.error('Error in getStayById:', error);
-      throw error;
+      console.error('Error getting stay by ID:', error);
+      return null;
     }
   },
   
@@ -821,4 +778,4 @@ export const stayService = {
   }
 };
 
-export default stayService; 
+export default stayService;

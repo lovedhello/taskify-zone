@@ -1,3 +1,4 @@
+
 // Define the types for the chat functionality
 import { User } from '@supabase/supabase-js';
 

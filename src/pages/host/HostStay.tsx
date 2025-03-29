@@ -200,18 +200,18 @@ const HostStay = () => {
       setImages(processedImages);
       setLocation(locationData);
       
-      // Use form.reset instead of multiple setValue calls
+      // Use form.reset instead of multiple setValue calls but with proper string conversions
       form.reset({
         title: stayData.title,
         description: stayData.description,
-        location_name: stayData.location_name || stayData.location,
-        price_per_night: parseFloat(stayData.price_per_night),
-        max_guests: parseInt(stayData.max_guests),
-        bedrooms: parseInt(stayData.bedrooms),
-        beds: parseInt(stayData.beds) || parseInt(stayData.bedrooms),
-        bathrooms: parseInt(stayData.bathrooms) || 1,
+        location_name: stayData.location_name || stayData.city + ', ' + stayData.state,
+        price_per_night: parseFloat(stayData.price_per_night.toString()),
+        max_guests: parseInt(stayData.max_guests.toString()),
+        bedrooms: parseInt(stayData.bedrooms.toString()),
+        beds: parseInt((stayData.beds || stayData.bedrooms).toString()),
+        bathrooms: parseInt(stayData.bathrooms.toString()),
         images: processedImages,
-        status: stayData.status,
+        status: (stayData.status as "draft" | "published") || "draft",
         amenities: stayAmenities.map((a: any) => 
           typeof a === 'object' ? a.id.toString() : a.toString()
         ),
@@ -224,8 +224,8 @@ const HostStay = () => {
         zipcode: stayData.zipcode,
         city: stayData.city,
         state: stayData.state,
-        latitude: parseFloat(stayData.latitude),
-        longitude: parseFloat(stayData.longitude),
+        latitude: parseFloat(stayData.latitude.toString()),
+        longitude: parseFloat(stayData.longitude.toString()),
         property_type: stayData.property_type || 'house'
       });
     } catch (error) {

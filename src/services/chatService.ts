@@ -441,4 +441,32 @@ export async function isParticipant(
   }
 
   return !!data;
-} 
+}
+
+/**
+ * Fetches a conversation by ID with participants
+ */
+export async function getConversation(conversationId: string): Promise<ConversationWithDetails | null> {
+  try {
+    const { data, error } = await supabase
+      .from('conversations')
+      .select(`
+        *,
+        participants:conversation_participants(
+          user_id,
+          profiles(id, name, avatar_url)
+        )
+      `)
+      .eq('id', conversationId)
+      .single();
+
+    if (error) throw error;
+    if (!data) return null;
+
+    // Type-safe conversion
+    return data as unknown as ConversationWithDetails;
+  } catch (error) {
+    console.error('Error fetching conversation:', error);
+    return null;
+  }
+}

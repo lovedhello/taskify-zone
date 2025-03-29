@@ -35,18 +35,19 @@ const getFullImageUrl = (path: string, type: 'stay' | 'food') => {
   return `${import.meta.env.VITE_BACKEND_URL || ''}${path}`;
 };
 
-interface FeaturedItem {
-  id: number;
+export interface FeaturedItem {
+  id: string | number;
   title: string;
   description: string;
+  price?: number;
   image: string;
-  price_per_person?: number;
-  price_per_night?: number;
-  host: {
+  rating?: number;
+  host?: {
     name: string;
     rating: number;
     reviews: number;
   };
+  link?: string;
 }
 
 interface CategoryCount {
