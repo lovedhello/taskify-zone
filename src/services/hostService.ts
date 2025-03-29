@@ -213,7 +213,6 @@ export async function setFoodExperiencePrimaryImage(
 // Host Stay Services
 export async function getHostExperiences(userId: string) {
   try {
-    // Wrap the host_id object in an array
     const { data, error } = await supabase
       .from('food_experiences')
       .select('*')

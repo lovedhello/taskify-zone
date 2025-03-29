@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { apiService } from '../services/api';
 import { supabase } from '../integrations/supabase/client';
 
-// Mock the Supabase client
+// Mock the Supabase client with a proper structure
 vi.mock('../integrations/supabase/client', () => ({
   supabase: {
     from: vi.fn(() => ({
@@ -34,7 +34,7 @@ describe('API Service', () => {
 
   describe('getFeaturedFood', () => {
     it('should return featured food data from Supabase', async () => {
-      // Mock Supabase response
+      // Mock data and response
       const mockData = [
         {
           id: 1,
@@ -46,24 +46,24 @@ describe('API Service', () => {
         }
       ];
 
-      const mockSupabaseResponse = {
-        data: mockData,
-        error: null
-      };
-      
-      const fromMock = vi.fn(() => ({
+      // Use a proper mock setup that matches what we defined above
+      const mockFromMethod = vi.fn(() => ({
         select: vi.fn(() => ({
           eq: vi.fn(() => ({
-            limit: vi.fn(() => mockSupabaseResponse)
+            limit: vi.fn(() => ({
+              data: mockData,
+              error: null
+            }))
           }))
         }))
       }));
       
-      (supabase.from as any) = fromMock;
+      // Replace the from method
+      (supabase.from as any) = mockFromMethod;
       
       const result = await apiService.getFeaturedFood();
-
-      expect(fromMock).toHaveBeenCalledWith('food_experiences');
+      
+      expect(mockFromMethod).toHaveBeenCalledWith('food_experiences');
       expect(result).toHaveLength(1);
       expect(result[0].title).toBe('Italian Pasta Making');
     });

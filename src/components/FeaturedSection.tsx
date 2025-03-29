@@ -5,7 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiService } from '@/services/api';
 
 interface FeaturedItem {
-  id: number;
+  id: string | number;
   title: string;
   description: string;
   image: string;

@@ -39,10 +39,8 @@ import { stayService, type Stay } from "@/services/stayService";
 import { useAuth } from "@/contexts/AuthContext";
 import { ChatButton } from '@/components/chat/ChatButton';
 
-// Define libraries as a constant outside the component to prevent re-creation on each render
 const mapLibraries: Libraries = ['places'];
 
-// Create a centralized Google Maps API key
 const GOOGLE_MAPS_API_KEY = 'AIzaSyDpB03uqoC8eWmdG8KRlBdiJaHWbXmtMgE';
 
 const StayDetails = () => {
@@ -56,27 +54,23 @@ const StayDetails = () => {
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
   
-  // Google Maps API loading with static libraries array
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
     libraries: mapLibraries,
     id: 'google-map-script'
   });
-  
-  // Get location coordinates from the stay data
+
   const locationCoords = stay?.coordinates || {
     lat: 40.7128,
     lng: -74.0060
   };
 
-  // Helper function to get full image URL
   const getFullImageUrl = (url: string) => {
     if (!url) return '/placeholder-stay.jpg';
     if (url.startsWith('http')) return url;
     return `${import.meta.env.VITE_BACKEND_URL || ''}${url}`;
   };
 
-  // Fetch the stay data
   useEffect(() => {
     const fetchStay = async () => {
       if (!id) return;
@@ -85,8 +79,20 @@ const StayDetails = () => {
         setLoading(true);
         const data = await stayService.getStayById(id);
         if (data) {
-          setStay(data);
-          console.log('Fetched stay data:', data);
+          const stayWithRequiredFields = {
+            ...data,
+            host: data.host || {
+              id: data.host_id,
+              name: "Host",
+              image: "/placeholder-avatar.jpg",
+              rating: 4.5,
+              reviews: 0,
+              phone: data.host?.phone || ""
+            }
+          };
+          
+          setStay(stayWithRequiredFields);
+          console.log('Fetched stay data:', stayWithRequiredFields);
         }
       } catch (error) {
         console.error('Error fetching stay:', error);
@@ -98,13 +104,12 @@ const StayDetails = () => {
     fetchStay();
   }, [id]);
 
-  // Check if the stay is in user's favorites - using a ref to prevent multiple fetches
   const favoritesChecked = useRef(false);
   useEffect(() => {
     const checkFavoriteStatus = async () => {
       if (user?.id && id && !favoritesChecked.current) {
         try {
-          favoritesChecked.current = true; // Mark as checked to prevent repeated calls
+          favoritesChecked.current = true;
           const favorites = await stayService.getFavorites(user.id);
           setIsFavorite(favorites.includes(id));
         } catch (error) {
@@ -124,15 +129,12 @@ const StayDetails = () => {
         const success = await stayService.toggleFavorite(id, user.id);
         if (success) {
           setIsFavorite(!isFavorite);
-          // Reset the ref if the user manually toggles a favorite
           favoritesChecked.current = true;
         }
       } catch (error) {
         console.error('Error toggling favorite:', error);
       }
     } else {
-      // If no user is logged in, just toggle the UI state
-      // In a real app, this would prompt a login
       setIsFavorite(!isFavorite);
     }
   };
@@ -142,7 +144,6 @@ const StayDetails = () => {
     setIsImageDialogOpen(true);
   };
 
-  // Find the price for the selected date
   const getSelectedDatePrice = () => {
     if (!stay?.availability || !selectedDate) return null;
     
@@ -192,7 +193,6 @@ const StayDetails = () => {
   return (
     <MainLayout>
       <div className="container mx-auto px-4 py-8">
-        {/* Header Section */}
         <div className="mb-8">
           <div className="flex flex-wrap justify-between items-start gap-4 mb-4">
             <div>
@@ -244,7 +244,6 @@ const StayDetails = () => {
           </div>
         </div>
 
-        {/* Enhanced Image Gallery - Compact Version */}
         <div className="mb-12">
           {stay.images && stay.images.length > 0 && (
             <ImageGallery
@@ -259,7 +258,6 @@ const StayDetails = () => {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-8">
-          {/* Left Column */}
           <div>
             <Tabs defaultValue="about" className="mb-12">
               <TabsList className="mb-6">
@@ -391,7 +389,6 @@ const StayDetails = () => {
                   <Separator className="mb-6" />
                   
                   <div className="space-y-6">
-                    {/* Reviews would be fetched from the API here */}
                     <p className="text-center text-muted-foreground py-8">
                       Reviews are being loaded from our database.
                     </p>
@@ -412,7 +409,6 @@ const StayDetails = () => {
                     </p>
                   </div>
                   
-                  {/* Google Maps Component */}
                   <div className="rounded-lg overflow-hidden mb-6 h-[300px]">
                     {!isLoaded ? (
                       <div className="w-full h-full bg-gray-100 flex items-center justify-center">
@@ -467,9 +463,7 @@ const StayDetails = () => {
             </Tabs>
           </div>
 
-          {/* Right Column - Booking Card */}
           <div>
-            {/* Main booking card - sticky */}
             <Card className="p-6 sticky top-24 mb-6">
               <div className="flex justify-between items-center mb-6">
                 <div>

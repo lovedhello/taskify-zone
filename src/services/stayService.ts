@@ -483,90 +483,60 @@ export const stayService = {
         .from('stays')
         .select(`
           *,
-          stay_images(*),
-          stay_reviews(*),
-          stay_amenities(*)
+          images:stay_images(*)
         `)
         .eq('id', stayId)
         .single();
-
-      if (error) throw error;
-      
-      if (!data) {
-        return null;
-      }
-
-      // Process the stay amenities rather than accessing direct amenities property
-      let amenitiesList: string[] = [];
-      if (data.stay_amenities && Array.isArray(data.stay_amenities)) {
-        // Extract amenity IDs from stay_amenities
-        const amenityIds = data.stay_amenities.map((item: any) => item.amenity_id);
         
-        if (amenityIds.length > 0) {
-          // Fetch the actual amenity names
-          const { data: amenitiesData } = await supabase
-            .from('amenities')
-            .select('*')
-            .in('id', amenityIds);
-            
-          if (amenitiesData) {
-            amenitiesList = amenitiesData.map((a: any) => a.name);
+      if (error) throw error;
+      if (!data) return null;
+      
+      // Create a full location displayable string
+      const locationName = data.location_name || `${data.city}, ${data.state}`;
+      
+      // Parse amenities if it's a string
+      let amenitiesList: string[] = [];
+      if (data.amenities) {
+        if (typeof data.amenities === 'string') {
+          try {
+            // Try parsing if it's a JSON string
+            amenitiesList = JSON.parse(data.amenities);
+          } catch (e) {
+            // If not valid JSON, split by comma if it's a comma-separated string
+            amenitiesList = data.amenities.split(',').map(item => item.trim());
           }
+        } else if (Array.isArray(data.amenities)) {
+          amenitiesList = data.amenities;
         }
       }
-
-      // Get the host profile data - using type assertion to help TypeScript
-      const hostProfile = data.host as UserProfile;
-      const userProfile = hostProfile || { name: 'Host', avatar_url: '' };
       
-      const stayImages = Array.isArray(data.stay_images) ? data.stay_images : [];
-      const stayReviews = Array.isArray(data.stay_reviews) ? data.stay_reviews : [];
-      
-      // Calculate average rating from reviews
-      const averageRating = stayReviews.length > 0
-        ? stayReviews.reduce((sum, review: any) => sum + review.rating, 0) / stayReviews.length
-        : 4.7;
-      
-      // Find primary image or use the first one
-      const primaryImage = stayImages.find(img => img.is_primary) || stayImages[0];
-      
-      // Process the image URLs into our desired format
-      const processedImages = stayImages
-        .map(img => ({
-          url: getFullImageUrl(img.image_path),
-          order: img.display_order || 0
-        }))
-        .sort((a, b) => (a.order || 0) - (b.order || 0));
-          
-      // If no images are found, add a placeholder image
-      if (processedImages.length === 0) {
-        processedImages.push({
-          url: '/images/mountain.jpg',
-          order: 0
-        });
-      }
+      // Create a host object for the stay
+      const hostData = {
+        id: data.host_id,
+        name: "Host",
+        image: "/placeholder-avatar.jpg",
+        rating: 4.5,
+        reviews: 10,
+        phone: ""
+      };
       
       return {
         ...data,
-        images: processedImages,
+        host: hostData,
+        location_name: locationName,
+        // Add processed amenities to the details field
         details: {
-          bedrooms: data.bedrooms || 1,
-          beds: data.beds || 1,
-          bathrooms: data.bathrooms || 1,
-          maxGuests: data.max_guests || 2,
-          amenities: amenitiesList, // Use the processed amenities list
-          location: data.location_name || 'Unknown location',
+          bedrooms: data.bedrooms,
+          beds: data.beds || data.bedrooms,
+          bathrooms: data.bathrooms,
+          maxGuests: data.max_guests,
+          amenities: amenitiesList,
+          location: locationName,
           propertyType: data.property_type || 'apartment'
-        },
-        coordinates: {
-          lat: data.latitude || 0,
-          lng: data.longitude || 0
-        },
-        availability: generateAvailability(data.price_per_night)
+        }
       };
-
     } catch (error) {
-      console.error('Error getting stay by ID:', error);
+      console.error('Error fetching stay:', error);
       return null;
     }
   },

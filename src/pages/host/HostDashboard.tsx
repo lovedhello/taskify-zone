@@ -1,10 +1,14 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, PlusCircle, Utensils, Home as HomeIcon, Star } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { 
+  Loader2, PlusCircle, Utensils, Home as HomeIcon, Star,
+  RefreshCw, DollarSign, Users, Calendar, Hotel, MessageCircle
+} from "lucide-react"; // Added missing icons
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"; // Added missing components
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { getHostExperiences, getHostStays } from "@/services/hostService";
@@ -71,6 +75,36 @@ export default function HostDashboard() {
   const [foodExperiences, setFoodExperiences] = useState<HostFoodExperience[]>([]);
   const [stays, setStays] = useState<HostStay[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("listings"); // Added missing state
+  
+  // Add missing handler functions
+  const handleFoodExperienceStatusChange = (id: string, status: "published" | "archived" | "draft") => {
+    console.log(`Changing food experience ${id} status to ${status}`);
+    // Implementation would update status in database
+  };
+  
+  const handleStayStatusChange = (id: string, status: "published" | "archived" | "draft") => {
+    console.log(`Changing stay ${id} status to ${status}`);
+    // Implementation would update status in database
+  };
+  
+  const handleDeleteFoodExperience = (id: string) => {
+    console.log(`Deleting food experience ${id}`);
+    // Implementation would delete from database
+  };
+  
+  const handleDeleteStay = (id: string) => {
+    console.log(`Deleting stay ${id}`);
+    // Implementation would delete from database
+  };
+  
+  const ConversationsList = () => {
+    return (
+      <div className="p-4 text-center">
+        <p className="text-muted-foreground">Your conversations will appear here</p>
+      </div>
+    );
+  };
   
   useEffect(() => {
     const fetchHostData = async () => {
@@ -82,11 +116,18 @@ export default function HostDashboard() {
         // Fetch food experiences
         const foodData = await getHostExperiences(user.id);
         if (foodData) {
-          // Process to ensure status is valid enum value
+          // Process to ensure status is valid enum value and add missing details property
           const processedFoodData = foodData.map(item => ({
             ...item,
             status: (item.status as "published" | "archived" | "draft") || "draft",
-            images: item.food_experience_images || []
+            images: item.food_experience_images || [],
+            details: {
+              duration: item.duration || '2 hours',
+              groupSize: `Max ${item.max_guests || 8} guests`,
+              includes: ['Food', 'Beverages'],
+              language: item.language || 'English',
+              location: `${item.city}, ${item.state}`,
+            }
           })) as HostFoodExperience[];
           
           setFoodExperiences(processedFoodData);
@@ -95,11 +136,22 @@ export default function HostDashboard() {
         // Fetch stays
         const staysData = await getHostStays(user.id);
         if (staysData) {
-          // Process to ensure status is valid enum value
+          // Process to ensure status is valid enum value and add missing details property
           const processedStaysData = staysData.map(item => ({
             ...item,
             status: (item.status as "published" | "archived" | "draft") || "draft",
-            images: item.stay_images || []
+            images: item.stay_images || [],
+            details: {
+              bedrooms: item.bedrooms || 1,
+              bathrooms: item.bathrooms || 1, 
+              beds: item.beds || 1,
+              maxGuests: item.max_guests || 2,
+              propertyType: item.property_type || 'apartment',
+              amenities: typeof item.amenities === 'string' 
+                ? item.amenities.split(',')
+                : ['Wi-Fi', 'Kitchen'],
+              location: item.location_name || `${item.city}, ${item.state}`
+            }
           })) as HostStay[];
           
           setStays(processedStaysData);

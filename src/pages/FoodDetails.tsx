@@ -139,6 +139,17 @@ const FoodDetails = () => {
     setIsImageDialogOpen(true);
   };
 
+  const renderChatButton = () => (
+    <ChatButton
+      hostId={experience?.host?.id || ''}
+      listingId={id || ''}
+      listingType="food"
+      listingTitle={experience?.title || ''}
+    >
+      Message Host
+    </ChatButton>
+  );
+
   if (loading) {
     return (
       <MainLayout>
@@ -306,15 +317,7 @@ const FoodDetails = () => {
                   </p>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <ChatButton
-                      hostId={experience?.host?.id}
-                      listingId={id || ''}
-                      listingType="food_experience"
-                      listingTitle={experience?.title || ''}
-                      className="w-full"
-                    >
-                      Message Host
-                    </ChatButton>
+                    {renderChatButton()}
                     <a href={`tel:${experience?.host?.phone || ''}`}>
                       <Button variant="outline" className="w-full">
                         <Phone className="w-4 h-4 mr-2" />
@@ -449,16 +452,7 @@ const FoodDetails = () => {
               <Separator className="my-4" />
               
               <div className="grid grid-cols-1 gap-3">
-                <ChatButton
-                  hostId={experience?.host?.id}
-                  listingId={id || ''}
-                  listingType="food_experience"
-                  listingTitle={experience?.title || ''}
-                  variant="outline"
-                >
-                  <MessageCircle className="w-4 h-4 mr-2" />
-                  Message Host
-                </ChatButton>
+                {renderChatButton()}
                 
                 <a href={`tel:${experience?.host?.phone || ''}`}>
                   <Button variant="outline" className="w-full">

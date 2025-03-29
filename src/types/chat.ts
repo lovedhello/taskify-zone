@@ -1,4 +1,3 @@
-
 // Define the types for the chat functionality
 import { User } from '@supabase/supabase-js';
 
@@ -69,4 +68,4 @@ export interface ChatInterfaceProps {
 export interface ConversationResponse {
   conversationId: string;
   isNew: boolean;
-} 
+}
