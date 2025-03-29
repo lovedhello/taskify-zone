@@ -231,52 +231,58 @@ export async function getMessages(
 /**
  * Fetches a conversation by ID with participants
  */
-export async function getConversationById(conversationId: string): Promise<ConversationWithDetails | null> {
+export async function getConversationById(
+  conversationId: string
+): Promise<ConversationWithDetails | null> {
   try {
-    const { data, error } = await supabase.rpc(
-      'get_conversation_by_id',
-      { conversation_id_param: conversationId }
-    );
+    console.time('getConversationById');
+    // Get conversation with all its details in a single query
+    const { data, error } = await supabase
+      .rpc('get_conversation_by_id', { conversation_id_param: conversationId });
 
-    if (error) throw error;
+    if (error) {
+      console.error('Error fetching conversation:', error);
+      throw error;
+    }
 
-    // Cast the result to the proper type
-    return data as unknown as ConversationWithDetails;
+    if (!data) {
+      return null;
+    }
+
+    console.timeEnd('getConversationById');
+    return data;
   } catch (error) {
-    console.error('Error fetching conversation:', error);
-    return null;
+    console.error('Error in getConversationById:', error);
+    throw error;
   }
 }
 
 /**
  * Fetches all conversations for a user
  */
-export async function getUserConversations(): Promise<ConversationWithDetails[]> {
+export async function getUserConversations(userId: string): Promise<ConversationWithDetails[]> {
   try {
-    const { data: session } = await supabase.auth.getSession();
-    if (!session?.session?.user) return [];
-
-    const { data, error } = await supabase.rpc(
-      'get_user_conversations_with_details',
-      { user_id_param: session.session.user.id }
-    );
-
-    if (error) throw error;
+    console.log('Fetching conversations for user:', userId);
+    console.time('getUserConversations');
     
-    // Handle potential JSON array or null
-    if (!data) return [];
-    
-    // Cast the result and check if it has array properties
-    const jsonData = data as any;
-    if (Array.isArray(jsonData)) {
-      return jsonData as ConversationWithDetails[];
-    } else {
-      console.warn('Expected array from get_user_conversations_with_details but got:', typeof jsonData);
-      return [];
+    // Get all conversations where the user is a participant with a more optimized query
+    const { data: conversations, error } = await supabase
+      .rpc('get_user_conversations_with_details', { user_id_param: userId });
+
+    if (error) {
+      console.error('Error fetching conversations:', error);
+      console.error('Error details:', JSON.stringify(error, null, 2));
+      throw error;
     }
+
+    console.timeEnd('getUserConversations');
+    console.log('Fetched conversations:', conversations?.length || 0);
+    
+    return conversations || [];
   } catch (error) {
-    console.error('Error fetching conversations:', error);
-    return [];
+    console.error('Error in getUserConversations:', error);
+    console.error('Error details:', JSON.stringify(error, null, 2));
+    throw error;
   }
 }
 
@@ -435,4 +441,4 @@ export async function isParticipant(
   }
 
   return !!data;
-}
+} 

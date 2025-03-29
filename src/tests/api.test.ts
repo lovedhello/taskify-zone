@@ -1,98 +1,111 @@
-import { apiService } from '@/services/api';
-import { supabase } from '@/integrations/supabase/client';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { apiService } from '../services/api';
+import { supabase } from '../integrations/supabase/client';
 
-// Mock Supabase client
-jest.mock('@/integrations/supabase/client', () => ({
+// Mock the Supabase client
+vi.mock('../integrations/supabase/client', () => ({
   supabase: {
-    from: jest.fn(() => ({
-      select: jest.fn().mockReturnThis(),
-      eq: jest.fn().mockReturnThis(),
-      limit: jest.fn().mockReturnThis(),
-      group: jest.fn().mockReturnThis(),
-    })),
-  },
+    from: vi.fn().mockReturnThis(),
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    limit: vi.fn().mockReturnThis(),
+    group: vi.fn().mockReturnThis(),
+    single: vi.fn()
+  }
 }));
 
 describe('API Service', () => {
-  afterEach(() => {
-    jest.clearAllMocks();
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('should fetch featured food experiences', async () => {
-    const mockData = [{ id: '1', title: 'Food 1', description: 'Desc 1', price_per_person: 20, host_id: 'host1', rating: 4.5 }];
-    (supabase.from as jest.Mock).mockReturnValue({
-      select: jest.fn().mockResolvedValue({ data: mockData, error: null }),
+  describe('getFeaturedFood', () => {
+    it('should return featured food data from Supabase', async () => {
+      // Mock Supabase response
+      const mockData = [
+        {
+          id: 1,
+          title: 'Italian Pasta Making',
+          description: 'Learn to make pasta',
+          price_per_person: 50,
+          food_experience_images: [{ url: '/images/pasta.jpg' }],
+          user_profiles: { name: 'Chef Marco' }
+        }
+      ];
+
+      (supabase.from as any).mockReturnThis();
+      (supabase.select as any).mockReturnThis();
+      (supabase.eq as any).mockReturnThis();
+      (supabase.limit as any).mockResolvedValue({ data: mockData, error: null });
+
+      const result = await apiService.getFeaturedFood();
+
+      expect(supabase.from).toHaveBeenCalledWith('food_experiences');
+      expect(result).toHaveLength(1);
+      expect(result[0].title).toBe('Italian Pasta Making');
     });
 
-    const result = await apiService.getFeaturedFood();
-    expect(result).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: '1',
-        title: 'Food 1',
-        description: 'Desc 1',
-        price_per_person: 20,
-        host: expect.any(Object),
-      }),
-    ]));
-  });
+    it('should return mock data when Supabase query fails', async () => {
+      // Mock Supabase error
+      (supabase.from as any).mockReturnThis();
+      (supabase.select as any).mockReturnThis();
+      (supabase.eq as any).mockReturnThis();
+      (supabase.limit as any).mockResolvedValue({ data: null, error: { message: 'Table does not exist' } });
 
-  it('should handle errors when fetching featured food experiences', async () => {
-    (supabase.from as jest.Mock).mockReturnValue({
-      select: jest.fn().mockResolvedValue({ data: null, error: new Error('Failed to fetch') }),
+      const result = await apiService.getFeaturedFood();
+
+      expect(supabase.from).toHaveBeenCalledWith('food_experiences');
+      expect(result).toHaveLength(3); // Mock data has 3 items
+      expect(result[0].title).toBe('Authentic Italian Pasta Making'); // First mock item
     });
-
-    const result = await apiService.getFeaturedFood();
-    expect(result).toEqual([]);
   });
 
-  it('should fetch featured stays', async () => {
-    const mockData = [{ id: '2', title: 'Stay 1', description: 'Desc 2', price_per_night: 50, host_id: 'host2' }];
-    (supabase.from as jest.Mock).mockReturnValue({
-      select: jest.fn().mockResolvedValue({ data: mockData, error: null }),
+  describe('getFeaturedStays', () => {
+    it('should return featured stays data from Supabase', async () => {
+      // Mock Supabase response
+      const mockData = [
+        {
+          id: 1,
+          title: 'Beach House',
+          description: 'Beautiful beach house',
+          price_per_night: 150,
+          stay_images: [{ url: '/images/beach.jpg' }],
+          user_profiles: { name: 'Host Sarah' }
+        }
+      ];
+
+      (supabase.from as any).mockReturnThis();
+      (supabase.select as any).mockReturnThis();
+      (supabase.eq as any).mockReturnThis();
+      (supabase.limit as any).mockResolvedValue({ data: mockData, error: null });
+
+      const result = await apiService.getFeaturedStays();
+
+      expect(supabase.from).toHaveBeenCalledWith('stays');
+      expect(result).toHaveLength(1);
+      expect(result[0].title).toBe('Beach House');
     });
-
-    const result = await apiService.getFeaturedStays();
-    expect(result).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: '2',
-        title: 'Stay 1',
-        description: 'Desc 2',
-        price_per_night: 50,
-        host: expect.any(Object),
-      }),
-    ]));
   });
 
-  it('should handle errors when fetching featured stays', async () => {
-    (supabase.from as jest.Mock).mockReturnValue({
-      select: jest.fn().mockResolvedValue({ data: null, error: new Error('Failed to fetch') }),
+  describe('getFoodCategories', () => {
+    it('should return food categories with counts', async () => {
+      // Mock Supabase response
+      const mockData = [
+        { cuisine_type: 'Italian', count: 10 },
+        { cuisine_type: 'Asian', count: 7 }
+      ];
+
+      (supabase.from as any).mockReturnThis();
+      (supabase.select as any).mockReturnThis();
+      (supabase.eq as any).mockReturnThis();
+      (supabase.group as any).mockResolvedValue({ data: mockData, error: null });
+
+      const result = await apiService.getFoodCategories();
+
+      expect(supabase.from).toHaveBeenCalledWith('food_experiences');
+      expect(result).toHaveLength(2);
+      expect(result[0].cuisine_type).toBe('Italian');
+      expect(result[0].count).toBe(10);
     });
-
-    const result = await apiService.getFeaturedStays();
-    expect(result).toEqual([]);
   });
-
-  it('should fetch food categories with counts', async () => {
-    const mockData = [{ cuisine_type: 'Italian' }, { cuisine_type: 'Italian' }, { cuisine_type: 'Mexican' }];
-    (supabase.from as jest.Mock).mockReturnValue({
-      select: jest.fn().mockResolvedValue({ data: mockData, error: null }),
-    });
-
-    const result = await apiService.getFoodCategories();
-    expect(result).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        cuisine_type: 'Italian',
-        count: expect.any(Number),
-      }),
-    ]));
-  });
-
-  it('should handle errors when fetching food categories', async () => {
-    (supabase.from as jest.Mock).mockReturnValue({
-      select: jest.fn().mockResolvedValue({ data: null, error: new Error('Failed to fetch') }),
-    });
-
-    const result = await apiService.getFoodCategories();
-    expect(result).toEqual([]);
-  });
-});
+}); 

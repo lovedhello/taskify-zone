@@ -61,7 +61,10 @@ const FoodDetails = () => {
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
     libraries,
-    id: 'google-map-script'
+    id: 'google-map-script',
+    onError: () => {
+      console.warn('Google Maps API failed to load. Using fallback location display.');
+    }
   });
 
   const getFullImageUrl = (url: string) => {
@@ -109,34 +112,11 @@ const FoodDetails = () => {
       if (!id) return;
       
       try {
-        const { data: reviewData, error: reviewError } = await supabase
-          .from('reviews')
-          .select('rating')
-          .eq('target_id', id)
-          .eq('target_type', 'food_experience');
-
-        if (reviewError) {
-          console.error('Error fetching reviews:', reviewError);
-        }
-
-        const reviews = reviewData || [];
-        let avgRating = 0;
-
-        if (reviews.length > 0) {
-          const sum = reviews.reduce((acc, review) => acc + (review.rating || 0), 0);
-          avgRating = sum / reviews.length;
-        }
+        const avgRating = await getAverageRating(id, 'food_experience');
+        const numReviews = await getReviewCount(id, 'food_experience');
+        
         setAverageRating(avgRating);
-
-        const { count, error: countError } = await supabase
-          .from('reviews')
-          .select('*', { count: 'exact', head: true })
-          .eq('target_id', id)
-          .eq('target_type', 'food_experience');
-          
-        if (!countError) {
-          setReviewCount(count || 0);
-        }
+        setReviewCount(numReviews);
       } catch (error) {
         console.error('Error fetching review stats:', error);
       }
@@ -332,7 +312,7 @@ const FoodDetails = () => {
                     <ChatButton
                       hostId={experience.host?.id}
                       listingId={id || ''}
-                      listingType="food"
+                      listingType="food_experience"
                       listingTitle={experience.title}
                       className="w-full"
                     >
@@ -475,7 +455,7 @@ const FoodDetails = () => {
                 <ChatButton
                   hostId={experience.host?.id}
                   listingId={id || ''}
-                  listingType="food"
+                  listingType="food_experience"
                   listingTitle={experience.title}
                   variant="outline"
                 >

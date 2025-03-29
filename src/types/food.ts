@@ -1,25 +1,20 @@
-
-// Update the host type to include phone property
 export interface FoodExperience {
-  id: string;
+  id: string | number;
   title: string;
   description: string;
-  images: {
-    url: string;
-    order: number;
-    is_primary?: boolean;
-  }[];
+  images: ImageData[];
   price_per_person: number;
   cuisine_type: string;
-  menu_description?: string;
+  menu_description: string;
   location_name: string;
+  amenities?: string[];
+  zipcode?: string;
   host: {
     id?: string;
     name: string;
     image: string;
     rating: number;
     reviews: number;
-    phone?: string;
   };
   details: {
     duration: string;
@@ -32,32 +27,30 @@ export interface FoodExperience {
     lat: number;
     lng: number;
   };
-  amenities?: string[];
 }
 
-// Update types for HostFoodExperience in the host dashboard
-export interface HostFoodExperience {
-  id: string | number;
-  title: string;
-  description: string;
-  status: 'draft' | 'published' | 'archived';
-  images: {
-    id: string;
-    url: string;
-    order: number;
-    is_primary: boolean;
-  }[];
-  price_per_person: number;
-  cuisine_type: string;
-  menu_description: string;
-  location_name: string;
-  created_at: string;
-  updated_at: string;
-  details: {
-    duration: string;
-    groupSize: string;
-    includes: string[];
-    language: string;
-    location: string;
-  };
+export interface ImageData {
+  url: string;
+  order?: number;
+  is_primary?: boolean;
+  full_url?: string;
 }
+
+export interface FoodAvailability {
+  id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  available_spots: number;
+}
+
+export interface FoodBooking {
+  id: string;
+  experience_id: string;
+  date: string;
+  start_time: string;
+  end_time: string;
+  guest_count: number;
+  total_price: number;
+  status: 'pending' | 'confirmed' | 'cancelled';
+} 
