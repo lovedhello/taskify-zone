@@ -34,11 +34,9 @@ export async function getFoodExperiences(filters: Record<string, any> = {}) {
           query = query.order('price_per_person', { ascending: true });
         } else if (filters.sort === 'price_desc') {
           query = query.order('price_per_person', { ascending: false });
-        } else if (filters.sort === 'rating_desc') {
-          query = query.order('rating', { ascending: false });
-        } else if (filters.sort === 'rating_asc') {
-          query = query.order('rating', { ascending: true });
         }
+        // For rating sorting, we'll do post-processing after fetching all data
+        // since the rating column isn't actually populated
       }
 
       // Filter by cuisine types
@@ -68,8 +66,8 @@ export async function getFoodExperiences(filters: Record<string, any> = {}) {
       return [];
     }
 
-    // Process the data into the right format
-    return data.map((experience) => {
+    // Process the data into the right format with actual review data
+    const processedData = await Promise.all(data.map(async (experience) => {
       // Format images
       const images = experience.images?.map((img: any) => ({
         url: img.image_path,
@@ -84,13 +82,31 @@ export async function getFoodExperiences(filters: Record<string, any> = {}) {
         return a.order - b.order;
       });
 
-      // Format host data - basic info if not available
+      // Get actual ratings and review count from reviews table
+      const { data: reviewsData, error: reviewsError } = await supabase
+        .from('reviews')
+        .select('rating')
+        .eq('target_id', experience.id)
+        .eq('target_type', 'food_experience');
+
+      let averageRating = 0;
+      let reviewCount = 0;
+
+      if (!reviewsError && reviewsData) {
+        reviewCount = reviewsData.length;
+        if (reviewCount > 0) {
+          const totalRating = reviewsData.reduce((sum, review) => sum + (review.rating || 0), 0);
+          averageRating = parseFloat((totalRating / reviewCount).toFixed(1));
+        }
+      }
+
+      // Format host data with actual rating
       const host = {
         id: experience.host_id,
         name: experience.host?.name || 'Host',
         image: experience.host?.avatar_url || '/default-avatar.png',
-        rating: 4.5, // Default value, would ideally be calculated from reviews
-        reviews: 0 // Default value, would ideally be count of reviews
+        rating: averageRating,
+        reviews: reviewCount
       };
 
       // Create the formatted FoodExperience object
@@ -115,7 +131,16 @@ export async function getFoodExperiences(filters: Record<string, any> = {}) {
           ? { lat: experience.latitude, lng: experience.longitude }
           : undefined
       };
-    });
+    }));
+
+    // Apply post-processing sorting for ratings if needed - sort by actual ratings from reviews
+    if (filters.sort === 'rating_desc') {
+      processedData.sort((a, b) => b.host.rating - a.host.rating);
+    } else if (filters.sort === 'rating_asc') {
+      processedData.sort((a, b) => a.host.rating - b.host.rating);
+    }
+
+    return processedData;
   } catch (error) {
     console.error('Error in getFoodExperiences:', error);
     return [];

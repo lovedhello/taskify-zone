@@ -175,10 +175,27 @@ export const apiService = {
       }
 
       // Transform data to match our interface
-      const results = data.map(item => {
+      const results = await Promise.all(data.map(async (item) => {
         const imagePath = imagesByExperienceId.get(item.id);
         const fullImageUrl = getFullImageUrl(imagePath, 'food');
-        console.log(`Experience ID: ${item.id}, Image path: ${imagePath}, Full URL: ${fullImageUrl}`);
+        
+        // Get actual ratings and review count from reviews table
+        const { data: reviewsData, error: reviewsError } = await supabase
+          .from('reviews')
+          .select('rating')
+          .eq('target_id', item.id)
+          .eq('target_type', 'food_experience');
+          
+        let averageRating = 0;
+        let reviewCount = 0;
+        
+        if (!reviewsError && reviewsData) {
+          reviewCount = reviewsData.length;
+          if (reviewCount > 0) {
+            const totalRating = reviewsData.reduce((sum, review) => sum + (review.rating || 0), 0);
+            averageRating = parseFloat((totalRating / reviewCount).toFixed(1));
+          }
+        }
         
         return {
           id: item.id,
@@ -188,11 +205,11 @@ export const apiService = {
           image: fullImageUrl,
           host: {
             name: hostMap.get(item.host_id) || 'Host',
-            rating: item.rating || 4.8, 
-            reviews: 12  // Default or fetch from reviews table
+            rating: averageRating,
+            reviews: reviewCount
           }
         };
-      });
+      }));
       
       // Update cache
       apiCache.featuredFood = {
@@ -271,19 +288,50 @@ export const apiService = {
         });
       }
 
-      // Transform data to match our interface
-      const results = data.map(item => ({
-        id: item.id,
-        title: item.title,
-        description: item.description,
-        price_per_night: item.price_per_night,
-        image: getFullImageUrl(imagesById.get(item.id), 'stay'),
-        host: {
-          name: hostMap.get(item.host_id) || 'Host',
-          rating: 4.7, // Default rating
-          reviews: 15  // Default reviews count
+      // Fetch ratings and review counts for each stay
+      const stayIds = data.map(item => item.id);
+      const stayRatings = new Map<string, { rating: number, reviews: number }>();
+      
+      await Promise.all(stayIds.map(async (stayId) => {
+        const { data: reviewsData, error: reviewsError } = await supabase
+          .from('reviews')
+          .select('rating')
+          .eq('target_id', stayId)
+          .eq('target_type', 'stay');
+          
+        if (!reviewsError && reviewsData) {
+          const reviewCount = reviewsData.length;
+          let averageRating = 0;
+          
+          if (reviewCount > 0) {
+            const totalRating = reviewsData.reduce((sum, review) => sum + (review.rating || 0), 0);
+            averageRating = parseFloat((totalRating / reviewCount).toFixed(1));
+          }
+          
+          stayRatings.set(stayId, {
+            rating: averageRating,
+            reviews: reviewCount
+          });
         }
       }));
+      
+      // Transform data to match our interface
+      const results = data.map(item => {
+        const ratingData = stayRatings.get(item.id) || { rating: 4.7, reviews: 0 };
+        
+        return {
+          id: item.id,
+          title: item.title,
+          description: item.description,
+          price_per_night: item.price_per_night,
+          image: getFullImageUrl(imagesById.get(item.id), 'stay'),
+          host: {
+            name: hostMap.get(item.host_id) || 'Host',
+            rating: ratingData.rating,
+            reviews: ratingData.reviews
+          }
+        };
+      });
       
       // Update cache
       apiCache.featuredStays = {

@@ -23,6 +23,8 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import { useEffect } from "react";
 import Profile from "@/pages/Profile";
 import { Toaster } from "sonner";
+import BookingConfirmation from "@/pages/BookingConfirmation";
+import UserBookings from "@/pages/UserBookings";
 
 const HostRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -91,6 +93,25 @@ const App = () => {
             <Route path="/privacy" element={<Privacy />} />
             <Route path="/help" element={<Help />} />
             <Route path="/safety" element={<Safety />} />
+
+            {/* Booking Routes */}
+            <Route
+              path="/bookings"
+              element={
+                <ProtectedRoute>
+                  <UserBookings />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/bookings/:bookingId"
+              element={
+                <ProtectedRoute>
+                  <BookingConfirmation />
+                </ProtectedRoute>
+              }
+            />
+
             <Route
               path="/host/dashboard"
               element={

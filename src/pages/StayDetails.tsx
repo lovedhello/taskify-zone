@@ -38,7 +38,10 @@ import { useLoadScript, GoogleMap, MarkerF, Libraries } from '@react-google-maps
 import { stayService, type Stay } from "@/services/stayService";
 import { useAuth } from "@/contexts/AuthContext";
 import { ChatButton } from '@/components/chat/ChatButton';
-
+import BookingWidget from "@/components/BookingWidget";
+import ReviewsSection from "@/components/reviews/ReviewsSection";
+import { getAverageRating, getReviewCount } from "@/services/reviewService";
+import { apiService } from "@/services/api";
 // Define libraries as a constant outside the component to prevent re-creation on each render
 const mapLibraries: Libraries = ['places'];
 
@@ -55,6 +58,9 @@ const StayDetails = () => {
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
+  const [averageRating, setAverageRating] = useState(0);
+  const [reviewCount, setReviewCount] = useState(0);
+  const [reviewRefreshTrigger, setReviewRefreshTrigger] = useState(0);
   
   // Google Maps API loading with static libraries array
   const { isLoaded } = useLoadScript({
@@ -97,6 +103,29 @@ const StayDetails = () => {
 
     fetchStay();
   }, [id]);
+
+  // Fetch review data
+  useEffect(() => {
+    const fetchReviewStats = async () => {
+      if (!id) return;
+      
+      try {
+        const avgRating = await getAverageRating(id, 'stay');
+        const numReviews = await getReviewCount(id, 'stay');
+        
+        setAverageRating(avgRating);
+        setReviewCount(numReviews);
+      } catch (error) {
+        console.error('Error fetching review stats:', error);
+      }
+    };
+
+    fetchReviewStats();
+  }, [id, reviewRefreshTrigger]);
+
+  const refreshReviewStats = () => {
+    setReviewRefreshTrigger(prev => prev + 1);
+  };
 
   // Check if the stay is in user's favorites - using a ref to prevent multiple fetches
   const favoritesChecked = useRef(false);
@@ -188,8 +217,8 @@ const StayDetails = () => {
               <div className="flex flex-wrap items-center gap-4 text-muted-foreground">
                 <div className="flex items-center gap-1">
                   <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
-                  <span className="font-medium">{stay.host.rating}</span>
-                  <span>({stay.host.reviews} reviews)</span>
+                  <span className="font-medium">{averageRating.toFixed(1)}</span>
+                  <span>({reviewCount} reviews)</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <MapPin className="w-4 h-4" />
@@ -342,10 +371,6 @@ const StayDetails = () => {
                   </p>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {console.log('Current stay host data:', {
-                      host: stay.host,
-                      hostKeys: Object.keys(stay.host)
-                    })}
                     <ChatButton
                       hostId={stay.host.id || ''}
                       listingId={id || ''}
@@ -355,48 +380,24 @@ const StayDetails = () => {
                     >
                       Message Host
                     </ChatButton>
-                    <a href={`tel:${stay.host.phone || ''}`}>
-                      <Button variant="outline" className="w-full">
+                    <Button variant="outline" className="w-full" asChild>
+                      <a href="tel:">
                         <Phone className="w-4 h-4 mr-2" />
                         Call Host
-                      </Button>
-                    </a>
+                      </a>
+                    </Button>
                   </div>
                 </Card>
               </TabsContent>
               
               <TabsContent value="reviews">
-                <Card className="p-6">
-                  <div className="flex items-center justify-between mb-6">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-2xl font-semibold">Reviews</h3>
-                      <Badge variant="secondary" className="ml-2">
-                        {stay.host.reviews} reviews
-                      </Badge>
-                    </div>
-                    
-                    <div className="flex items-center">
-                      <div className="flex">
-                        {[...Array(5)].map((_, i) => (
-                          <Star 
-                            key={i} 
-                            className={`w-5 h-5 ${i < stay.host.rating ? "text-yellow-500 fill-yellow-500" : "text-gray-300"}`} 
-                          />
-                        ))}
-                      </div>
-                      <span className="ml-2 font-medium">{stay.host.rating.toFixed(1)}</span>
-                    </div>
-                  </div>
-                  
-                  <Separator className="mb-6" />
-                  
-                  <div className="space-y-6">
-                    {/* Reviews would be fetched from the API here */}
-                    <p className="text-center text-muted-foreground py-8">
-                      Reviews are being loaded from our database.
-                    </p>
-                  </div>
-                </Card>
+                <ReviewsSection 
+                  listingId={id || ''} 
+                  listingType="stay"
+                  averageRating={averageRating}
+                  reviewCount={reviewCount}
+                  onReviewSubmitted={refreshReviewStats}
+                />
               </TabsContent>
               
               <TabsContent value="location" className="space-y-8">
@@ -470,79 +471,13 @@ const StayDetails = () => {
           {/* Right Column - Booking Card */}
           <div>
             {/* Main booking card - sticky */}
-            <Card className="p-6 sticky top-24 mb-6">
-              <div className="flex justify-between items-center mb-6">
-                <div>
-                  <span className="text-3xl font-bold">
-                    ${stay.price_per_night}
-                  </span>
-                  <span className="text-muted-foreground ml-1">per night</span>
-                </div>
-              </div>
-              
-              <Separator className="my-4" />
-              
-              <div className="space-y-4 mb-6">
-                <div className="flex items-center gap-2">
-                  <Bed className="w-5 h-5 text-primary" />
-                  <div>
-                    <p className="font-medium">{stay.details.beds} beds</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <Bath className="w-5 h-5 text-primary" />
-                  <div>
-                    <p className="font-medium">{stay.details.bathrooms} bathrooms</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-primary" />
-                  <div>
-                    <p className="font-medium">Up to {stay.details.maxGuests} guests</p>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <Home className="w-5 h-5 text-primary" />
-                  <div>
-                    <p className="font-medium">{stay.details.bedrooms} bedrooms</p>
-                  </div>
-                </div>
-              </div>
-              
-              <Separator className="my-4" />
-              
-              <div className="space-y-4">
-                <DatePicker
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  availableDates={stay.availability
-                    ?.filter(a => a.is_available)
-                    .map(a => new Date(a.date))}
-                />
-                
-                {selectedDateInfo && (
-                  <div className="space-y-2 p-4 bg-primary/5 rounded-lg">
-                    <div className="flex justify-between items-center">
-                      <span>Price for {format(selectedDate!, 'MMM dd, yyyy')}:</span>
-                      <span className="font-semibold">${selectedDateInfo.price}</span>
-                    </div>
-                  </div>
-                )}
-                
-                <Button className="w-full" size="lg">
-                  Book Now
-                </Button>
-              </div>
-              
-              <p className="text-center text-sm text-muted-foreground mt-4">
-                You won't be charged yet
-              </p>
-            </Card>
-            
-            
+            <div className="sticky top-24 mb-6">
+              <BookingWidget 
+                stayId={id || ''}
+                price={stay.price_per_night}
+                maxGuests={stay.details.maxGuests}
+              />
+            </div>
           </div>
         </div>
       </div>

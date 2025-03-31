@@ -19,6 +19,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { cn } from "@/lib/utils";
 import { stayService, type Stay } from "@/services/stayService";
 import { useAuth } from "@/contexts/AuthContext";
+import { StayCard } from "@/components/cards/StayCard";
 
 // Property types with more relevant categories for individual hosts
 const propertyTypes = [
@@ -92,13 +93,6 @@ const Stays = () => {
     // Add a unique ID to ensure only one instance loads
     id: 'google-map-script'
   });
-
-  // Helper function to get full image URL
-  const getFullImageUrl = (url: string) => {
-    if (!url) return `/images/placeholder-stay.jpg`;
-    if (url.startsWith('http')) return url;
-    return `${import.meta.env.VITE_BACKEND_URL || ''}${url}`;
-  };
 
   useEffect(() => {
     // Update zipcode and location when searchParams change
@@ -612,77 +606,12 @@ const Stays = () => {
               ) : filteredStays.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                   {filteredStays.map((stay) => (
-                    <Card 
+                    <StayCard 
                       key={stay.id}
-                      className="group overflow-hidden hover:shadow-lg transition-all duration-300"
-                    >
-                      <div className="relative">
-                        <div 
-                          className="aspect-[4/3] overflow-hidden cursor-pointer"
-                          onClick={() => navigate(`/stays/${stay.id}`)}
-                        >
-                          <img
-                            src={getFullImageUrl(stay.image)}
-                            alt={stay.title}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                          />
-                        </div>
-                        
-                        <Badge 
-                          className="absolute bottom-2 left-2 bg-white/90 text-black hover:bg-white/90"
-                        >
-                          {propertyTypes.find(t => t.id === stay.details.propertyType)?.label || 'Stay'}
-                        </Badge>
-                      </div>
-                      <CardHeader className="cursor-pointer" onClick={() => navigate(`/stays/${stay.id}`)}>
-                        <div className="flex justify-between items-start">
-                          <CardTitle className="text-xl">{stay.title}</CardTitle>
-                          <div className="flex items-center gap-1">
-                            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                            <span className="font-medium">{stay.host.rating}</span>
-                          </div>
-                        </div>
-                        <CardDescription className="line-clamp-2 mt-1">
-                          {stay.description}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                          <div className="flex items-center gap-1">
-                            <Bed className="w-4 h-4" />
-                            <span>{stay.details.bedrooms} {stay.details.bedrooms === 1 ? 'bedroom' : 'bedrooms'}</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <Users className="w-4 h-4" />
-                            <span>{stay.details.maxGuests} guests</span>
-                          </div>
-                        </div>
-                        <div className="mt-4">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2">
-                              <img
-                                src={getFullImageUrl(stay.host.image)}
-                                alt={stay.host.name}
-                                className="w-8 h-8 rounded-full object-cover"
-                              />
-                              <span className="text-sm">{stay.host.name}</span>
-                            </div>
-                            <span className="text-lg font-semibold text-primary">
-                              ${stay.price_per_night}
-                              <span className="text-sm font-normal text-muted-foreground">/night</span>
-                            </span>
-                          </div>
-                        </div>
-                      </CardContent>
-                      <CardFooter className="pt-0">
-                        <Button 
-                          className="w-full"
-                          onClick={() => navigate(`/stays/${stay.id}`)}
-                        >
-                          View Details
-                        </Button>
-                      </CardFooter>
-                    </Card>
+                      stay={stay}
+                      propertyTypes={propertyTypes}
+                      onClick={() => navigate(`/stays/${stay.id}`)}
+                    />
                   ))}
                 </div>
               ) : (

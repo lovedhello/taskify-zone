@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card } from "@/components/ui/card";
@@ -8,21 +7,26 @@ import { Star } from "lucide-react";
 
 interface ReviewsSectionProps {
   listingId: string;
-  listingType: 'stay' | 'food';
+  listingType: 'stay' | 'food_experience';
   averageRating?: number;
   reviewCount?: number;
+  onReviewSubmitted?: () => void;
 }
 
 const ReviewsSection = ({ 
   listingId, 
   listingType,
   averageRating = 0,
-  reviewCount = 0
+  reviewCount = 0,
+  onReviewSubmitted
 }: ReviewsSectionProps) => {
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   
   const handleReviewSubmitted = () => {
     setRefreshTrigger(prev => prev + 1);
+    if (onReviewSubmitted) {
+      onReviewSubmitted();
+    }
   };
 
   return (

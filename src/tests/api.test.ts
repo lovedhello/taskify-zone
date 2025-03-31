@@ -45,7 +45,7 @@ describe('API Service', () => {
       expect(result[0].title).toBe('Italian Pasta Making');
     });
 
-    it('should return mock data when Supabase query fails', async () => {
+    it('should return empty array when Supabase query fails', async () => {
       // Mock Supabase error
       (supabase.from as any).mockReturnThis();
       (supabase.select as any).mockReturnThis();
@@ -55,8 +55,7 @@ describe('API Service', () => {
       const result = await apiService.getFeaturedFood();
 
       expect(supabase.from).toHaveBeenCalledWith('food_experiences');
-      expect(result).toHaveLength(3); // Mock data has 3 items
-      expect(result[0].title).toBe('Authentic Italian Pasta Making'); // First mock item
+      expect(result).toEqual([]);
     });
   });
 

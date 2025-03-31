@@ -20,7 +20,7 @@ interface Review {
 
 interface ReviewsListProps {
   listingId: string;
-  listingType: 'stay' | 'food';
+  listingType: 'stay' | 'food_experience';
   refreshTrigger?: number;
 }
 
@@ -43,7 +43,7 @@ const ReviewsList = ({ listingId, listingType, refreshTrigger = 0 }: ReviewsList
             author_id
           `)
           .eq('target_id', listingId)
-          .eq('target_type', listingType === 'food' ? 'food_experience' : 'stay')
+          .eq('target_type', listingType)
           .order('created_at', { ascending: false });
 
         if (error) throw error;

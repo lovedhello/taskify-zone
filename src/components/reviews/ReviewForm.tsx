@@ -5,10 +5,11 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Star, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { apiService } from "@/services/api";
 
 interface ReviewFormProps {
   listingId: string;
-  listingType: 'stay' | 'food';
+  listingType: 'stay' | 'food_experience';
   onSuccess?: () => void;
 }
 
@@ -48,12 +49,19 @@ const ReviewForm = ({ listingId, listingType, onSuccess }: ReviewFormProps) => {
         .insert({
           author_id: userId,
           target_id: listingId,
-          target_type: listingType === 'food' ? 'food_experience' : 'stay',
+          target_type: listingType,
           rating,
           content: content
         });
       
       if (error) throw error;
+      
+      // Invalidate the appropriate cache based on listing type
+      if (listingType === 'food_experience') {
+        apiService.invalidateCache('food');
+      } else if (listingType === 'stay') {
+        apiService.invalidateCache('stays');
+      }
       
       toast.success("Review submitted successfully!");
       setRating(0);

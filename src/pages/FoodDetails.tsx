@@ -57,14 +57,12 @@ const FoodDetails = () => {
   const imageContainerRef = useRef<HTMLDivElement>(null);
   const [averageRating, setAverageRating] = useState(0);
   const [reviewCount, setReviewCount] = useState(0);
+  const [reviewRefreshTrigger, setReviewRefreshTrigger] = useState(0);
   
   const { isLoaded } = useLoadScript({
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
     libraries,
     id: 'google-map-script',
-    onError: () => {
-      console.warn('Google Maps API failed to load. Using fallback location display.');
-    }
   });
 
   const getFullImageUrl = (url: string) => {
@@ -124,7 +122,11 @@ const FoodDetails = () => {
 
     fetchExperience();
     fetchReviewStats();
-  }, [id]);
+  }, [id, reviewRefreshTrigger]);
+
+  const refreshReviewStats = () => {
+    setReviewRefreshTrigger(prev => prev + 1);
+  };
 
   const toggleFavorite = async () => {
     if (!id) return;
@@ -318,7 +320,7 @@ const FoodDetails = () => {
                     >
                       Message Host
                     </ChatButton>
-                    <a href={`tel:${experience.host.phone || ''}`}>
+                    <a href="tel:">
                       <Button variant="outline" className="w-full">
                         <Phone className="w-4 h-4 mr-2" />
                         Call Host
@@ -334,6 +336,7 @@ const FoodDetails = () => {
                   listingType="food_experience"
                   averageRating={averageRating}
                   reviewCount={reviewCount}
+                  onReviewSubmitted={refreshReviewStats}
                 />
               </TabsContent>
               
@@ -463,7 +466,7 @@ const FoodDetails = () => {
                   Message Host
                 </ChatButton>
                 
-                <a href={`tel:${experience.host.phone || ''}`}>
+                <a href="tel:">
                   <Button variant="outline" className="w-full">
                     <Phone className="w-4 h-4 mr-2" />
                     Call Host

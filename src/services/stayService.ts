@@ -74,10 +74,17 @@ interface StayFromDB {
   latitude?: number;
   longitude?: number;
   host_id: string;
-  profiles: UserProfile[];
+  is_featured?: boolean;
+  host: UserProfile | UserProfile[];
   stay_images: StayImage[];
-  stay_reviews: StayReview[];
-  stay_amenities?: { id: string; amenity_id: string; }[];
+  stay_reviews?: StayReview[];
+  stay_amenities?: { 
+    amenity_id: string; 
+    amenities?: { 
+      id: string; 
+      name: string 
+    }
+  }[];
 }
 
 // Helper function to get full image URL
@@ -114,172 +121,6 @@ const generateAvailability = (basePrice: number) => {
   
   return availability;
 };
-
-// Mock data for initial development
-const mockStays: Stay[] = [
-  {
-    id: "1",
-    title: "Luxury Beachfront Villa",
-    description: "Spacious villa with private beach access, pool, and stunning ocean views. Perfect for a family getaway or a romantic retreat. Enjoy the sunset from your private terrace.",
-    image: "/images/stays/beach-villa.jpg",
-    images: [
-      { url: "/images/stays/beach-villa.jpg", order: 0 },
-      { url: "/images/stays/beach-villa-2.jpg", order: 1 },
-      { url: "/images/stays/beach-villa-3.jpg", order: 2 }
-    ],
-    price_per_night: 249,
-    host: {
-      id: "sarah123",
-      name: "Sarah",
-      image: "/images/avatars/sarah.jpg",
-      rating: 4.9,
-      reviews: 84
-    },
-    host_id: "sarah",
-    details: {
-      bedrooms: 3,
-      beds: 4,
-      bathrooms: 2,
-      maxGuests: 8,
-      amenities: ["Wi-Fi", "Pool", "Kitchen", "Free parking", "Beach access", "Air conditioning"],
-      location: "Miami Beach, FL",
-      propertyType: "house"
-    },
-    coordinates: {
-      lat: 25.7907,
-      lng: -80.1300
-    }
-  },
-  {
-    id: "2",
-    title: "Mountain Retreat Cabin",
-    description: "Cozy cabin surrounded by pine forest with hiking trails and mountain views. The perfect place to disconnect and enjoy nature. Includes a hot tub on the deck.",
-    image: "/images/stays/mountain-cabin.jpg",
-    images: [
-      { url: "/images/stays/mountain-cabin.jpg", order: 0 },
-      { url: "/images/stays/mountain-cabin-2.jpg", order: 1 },
-      { url: "/images/stays/mountain-cabin-3.jpg", order: 2 }
-    ],
-    price_per_night: 179,
-    host: {
-      id: "michael456",
-      name: "Michael",
-      image: "/images/avatars/michael.jpg",
-      rating: 4.8,
-      reviews: 62
-    },
-    host_id: "michael",
-    details: {
-      bedrooms: 2,
-      beds: 3,
-      bathrooms: 1,
-      maxGuests: 6,
-      amenities: ["Wi-Fi", "Fireplace", "Hot tub", "Kitchen", "Free parking", "Pets allowed"],
-      location: "Asheville, NC",
-      propertyType: "cabin"
-    },
-    coordinates: {
-      lat: 35.5951,
-      lng: -82.5515
-    }
-  },
-  {
-    id: "3",
-    title: "Modern Downtown Loft",
-    description: "Stylish loft in the heart of the city, walking distance to restaurants and attractions. Modern amenities and contemporary design make this an ideal city escape.",
-    image: "/images/stays/city-loft.jpg",
-    images: [
-      { url: "/images/stays/city-loft.jpg", order: 0 },
-      { url: "/images/stays/city-loft-2.jpg", order: 1 },
-      { url: "/images/stays/city-loft-3.jpg", order: 2 }
-    ],
-    price_per_night: 155,
-    host: {
-      id: "jennifer789",
-      name: "Jennifer",
-      image: "/images/avatars/jennifer.jpg",
-      rating: 4.7,
-      reviews: 93
-    },
-    host_id: "jennifer",
-    details: {
-      bedrooms: 1,
-      beds: 1,
-      bathrooms: 1,
-      maxGuests: 2,
-      amenities: ["Wi-Fi", "Air conditioning", "Kitchen", "Washer/Dryer", "Gym access", "Doorman"],
-      location: "Chicago, IL",
-      propertyType: "apartment"
-    },
-    coordinates: {
-      lat: 41.8781,
-      lng: -87.6298
-    }
-  },
-  {
-    id: "4",
-    title: "Cozy Private Room in Shared House",
-    description: "Comfortable private room in a shared house with access to common areas. Great for solo travelers or couples looking for an affordable option.",
-    image: "/images/stays/private-room.jpg",
-    images: [
-      { url: "/images/stays/private-room.jpg", order: 0 },
-      { url: "/images/stays/private-room-2.jpg", order: 1 }
-    ],
-    price_per_night: 75,
-    host: {
-      name: "David",
-      image: "/images/avatars/david.jpg",
-      rating: 4.6,
-      reviews: 47
-    },
-    host_id: "david",
-    details: {
-      bedrooms: 1,
-      beds: 1,
-      bathrooms: 1,
-      maxGuests: 2,
-      amenities: ["Wi-Fi", "Kitchen access", "Laundry", "Backyard", "Street parking"],
-      location: "Portland, OR",
-      propertyType: "room"
-    },
-    coordinates: {
-      lat: 45.5152,
-      lng: -122.6784
-    }
-  },
-  {
-    id: "5",
-    title: "Charming Cottage with Garden",
-    description: "Quaint cottage with a beautiful garden and outdoor seating area. Close to local attractions but secluded enough for peace and quiet.",
-    image: "/images/stays/cottage.jpg",
-    images: [
-      { url: "/images/stays/cottage.jpg", order: 0 },
-      { url: "/images/stays/cottage-2.jpg", order: 1 },
-      { url: "/images/stays/cottage-3.jpg", order: 2 }
-    ],
-    price_per_night: 120,
-    host: {
-      name: "Emma",
-      image: "/images/avatars/emma.jpg",
-      rating: 4.9,
-      reviews: 71
-    },
-    host_id: "emma",
-    details: {
-      bedrooms: 2,
-      beds: 2,
-      bathrooms: 1,
-      maxGuests: 4,
-      amenities: ["Wi-Fi", "Garden", "Kitchen", "Free parking", "BBQ grill", "Fire pit"],
-      location: "Savannah, GA",
-      propertyType: "cottage"
-    },
-    coordinates: {
-      lat: 32.0835,
-      lng: -81.0998
-    }
-  }
-];
 
 // Service functions
 export const stayService = {
@@ -319,7 +160,6 @@ export const stayService = {
           host_id,
           host:profiles!host_id(id, name, avatar_url),
           stay_images:stay_images(id, image_path, is_primary, display_order),
-          stay_reviews:stay_reviews(rating),
           stay_amenities:stay_amenities(amenity_id, amenities:amenities(id, name))
         `)
         .eq('status', 'published');
@@ -350,12 +190,9 @@ export const stayService = {
           case 'price_desc':
             query = query.order('price_per_night', { ascending: false });
             break;
-          case 'rating_desc':
-            // Complex sorting would need to be handled in post-processing
-            query = query.order('id', { ascending: true });
-            break;
           default:
             query = query.order('id', { ascending: true });
+            break;
         }
       }
       
@@ -375,21 +212,33 @@ export const stayService = {
         return [];
       }
       
-      console.log('Raw stays data from DB:', data);
-      
-      // Transform data to match our interface
-      const transformedData = data.map(stayData => {
-        // Get the host profile data - using type assertion to help TypeScript
-        const hostProfile = stayData.host as UserProfile;
+      // Process the data into the right format with actual review data
+      const processedData = await Promise.all(data.map(async (stayData) => {
+        // Get the host profile data
+        const hostProfile = stayData.host && Array.isArray(stayData.host) ? stayData.host[0] : stayData.host;
         const userProfile = hostProfile || { name: 'Host', avatar_url: '' };
         
         const stayImages = Array.isArray(stayData.stay_images) ? stayData.stay_images : [];
-        const stayReviews = Array.isArray(stayData.stay_reviews) ? stayData.stay_reviews : [];
         
-        // Calculate average rating from reviews
-        const averageRating = stayReviews.length > 0
-          ? stayReviews.reduce((sum, review: any) => sum + review.rating, 0) / stayReviews.length
-          : 4.7;
+        // Get real ratings and review count from reviews table
+        const { data: reviewsData, error: reviewsError } = await supabase
+          .from('reviews')
+          .select('rating')
+          .eq('target_id', stayData.id)
+          .eq('target_type', 'stay');
+
+        let averageRating = 0;
+        let reviewCount = 0;
+
+        if (!reviewsError && reviewsData) {
+          reviewCount = reviewsData.length;
+          if (reviewCount > 0) {
+            const totalRating = reviewsData.reduce((sum, review) => sum + (review.rating || 0), 0);
+            averageRating = parseFloat((totalRating / reviewCount).toFixed(1));
+          }
+        } else {
+          averageRating = 4.7; // Default if no reviews
+        }
         
         // Find primary image or use the first one
         const primaryImage = stayImages.find(img => img.is_primary) || stayImages[0];
@@ -446,8 +295,8 @@ export const stayService = {
             id: stayData.host_id,
             name: userProfile.name || 'Host',
             image: getFullImageUrl(userProfile.avatar_url || ''),
-            rating: parseFloat(averageRating.toFixed(1)),
-            reviews: stayReviews.length || Math.floor(Math.random() * 50) + 10
+            rating: averageRating,
+            reviews: reviewCount
           },
           host_id: stayData.host_id,
           details: {
@@ -466,10 +315,16 @@ export const stayService = {
           // Generate availability for now - will be replaced with real data later
           availability: generateAvailability(stayData.price_per_night)
         };
-      });
+      }));
       
-      console.log(`Returning ${transformedData.length} stays from database`);
-      return transformedData;
+      console.log(`Returning ${processedData.length} stays from database`);
+      
+      // Apply post-processing sorting for ratings if needed
+      if (options.sort === 'rating_desc') {
+        processedData.sort((a, b) => b.host.rating - a.host.rating);
+      }
+      
+      return processedData;
     } catch (error) {
       console.error('Error in getStays:', error);
       throw error;
@@ -479,9 +334,7 @@ export const stayService = {
   // Get a specific stay by ID
   async getStayById(id: string): Promise<Stay | null> {
     try {
-      console.log(`Fetching stay with ID: ${id}`);
-      
-      // Try to fetch from Supabase
+      // Get stay data with related records
       const { data, error } = await supabase
         .from('stays')
         .select(`
@@ -503,7 +356,6 @@ export const stayService = {
           host_id,
           host:profiles!host_id(id, name, avatar_url),
           stay_images:stay_images(id, image_path, is_primary, display_order),
-          stay_reviews:stay_reviews(id, rating, comment, user_id, created_at),
           stay_amenities:stay_amenities(amenity_id, amenities:amenities(id, name))
         `)
         .eq('id', id)
@@ -511,106 +363,117 @@ export const stayService = {
       
       if (error) {
         console.error('Error fetching stay:', error);
-        throw new Error(`Failed to fetch stay with ID: ${id}`);
-      }
-      
-      if (!data) {
-        console.log(`Stay with ID ${id} not found`);
         return null;
       }
       
-      // Get the host profile data - using type assertion to help TypeScript
-      const hostProfile = data.host as UserProfile;
-      const userProfile = hostProfile || { name: 'Host', avatar_url: '' };
+      if (!data) {
+        return null;
+      }
       
+      // Get real ratings from reviews table
+      const { data: reviewsData, error: reviewsError } = await supabase
+        .from('reviews')
+        .select('rating')
+        .eq('target_id', id)
+        .eq('target_type', 'stay');
+
+      let averageRating = 0;
+      let reviewCount = 0;
+
+      if (!reviewsError && reviewsData) {
+        reviewCount = reviewsData.length;
+        if (reviewCount > 0) {
+          const totalRating = reviewsData.reduce((sum, review) => sum + (review.rating || 0), 0);
+          averageRating = parseFloat((totalRating / reviewCount).toFixed(1));
+        }
+      } else {
+        averageRating = 4.7; // Default if no reviews
+      }
+      
+      // Process stay images
       const stayImages = Array.isArray(data.stay_images) ? data.stay_images : [];
-      const stayReviews = Array.isArray(data.stay_reviews) ? data.stay_reviews : [];
       
-      // Calculate average rating from reviews
-      const averageRating = stayReviews.length > 0
-        ? stayReviews.reduce((sum, review: any) => sum + review.rating, 0) / stayReviews.length
-        : 4.7;
+      // Sort by display_order if available
+      stayImages.sort((a, b) => {
+        if (a.display_order !== undefined && b.display_order !== undefined) {
+          return a.display_order - b.display_order;
+        }
+        return 0;
+      });
       
-      // Find primary image or use the first one
-      const primaryImage = stayImages.find(img => img.is_primary) || stayImages[0];
+      // Map to our simplified image format with full URLs
+      const images = stayImages.map(img => ({
+        url: getFullImageUrl(img.image_path),
+        order: img.display_order
+      }));
       
-      // Check if we have amenities from the stay_amenities relationship
-      const stayAmenities = Array.isArray(data.stay_amenities) ? data.stay_amenities : [];
+      // Get amenities
+      let amenities: string[] = [];
       
-      // Extract amenity names from the nested join
-      let amenitiesArray: string[] = [];
-      if (stayAmenities && stayAmenities.length > 0) {
-        // Extract amenity names from the nested join
-        amenitiesArray = stayAmenities
-          .filter(item => item.amenities && item.amenities.name) // Only include valid entries
+      if (data.stay_amenities && Array.isArray(data.stay_amenities)) {
+        amenities = data.stay_amenities
+          .filter(item => item.amenities && item.amenities.name)
           .map(item => item.amenities.name);
       }
       
-      // Default amenities if none are provided
-      if (amenitiesArray.length === 0) {
-        amenitiesArray = ['Wi-Fi', 'Kitchen'];
+      if (amenities.length === 0 && data.amenities) {
+        // Try parsing from the amenities field if stay_amenities is empty
+        if (Array.isArray(data.amenities)) {
+          amenities = data.amenities;
+        } else if (typeof data.amenities === 'string') {
+          try {
+            const parsed = JSON.parse(data.amenities);
+            amenities = Array.isArray(parsed) ? parsed : [data.amenities];
+          } catch (e) {
+            amenities = data.amenities.split(',').map(a => a.trim());
+          }
+        }
       }
       
-      // Log the stay images to help with debugging
-      console.log('Stay images found:', stayImages);
-      
-      // Process the images
-      const processedImages = stayImages
-        .map(img => ({
-          url: getFullImageUrl(img.image_path),
-          order: img.display_order || 0
-        }))
-        .sort((a, b) => (a.order || 0) - (b.order || 0));
-      
-      // If no images are found, add a placeholder
-      if (processedImages.length === 0) {
-        processedImages.push({
-          url: '/images/mountain.jpg',
-          order: 0
-        });
+      // If still empty, add some default amenities
+      if (amenities.length === 0) {
+        amenities = ['WiFi', 'Kitchen', 'TV', 'Air conditioning'];
       }
       
-      // Transform data to match our interface
-      const transformedData = {
+      // Get host data
+      const host = data.host ?? { name: 'Host Name', avatar_url: '' };
+      
+      // Generate availability for demo purposes
+      const availability = generateAvailability(data.price_per_night || 100);
+      
+      return {
         id: data.id,
         title: data.title,
         description: data.description,
+        images: images,
         price_per_night: data.price_per_night,
-        status: data.status,
-        images: processedImages,
-        image: stayImages.length > 0 
-          ? getFullImageUrl(primaryImage?.image_path || '') 
-          : processedImages[0].url,
-        host: {
-          id: data.host_id,
-          name: userProfile.name || 'Host',
-          image: getFullImageUrl(userProfile.avatar_url || ''),
-          rating: parseFloat(averageRating.toFixed(1)),
-          reviews: stayReviews.length || Math.floor(Math.random() * 50) + 10
-        },
         host_id: data.host_id,
+        host: {
+          id: host.id,
+          name: host.name,
+          image: host.avatar_url || '/placeholder-user.jpg',
+          rating: averageRating,
+          reviews: reviewCount
+        },
         details: {
           bedrooms: data.bedrooms || 1,
           beds: data.beds || 1,
           bathrooms: data.bathrooms || 1,
           maxGuests: data.max_guests || 2,
-          amenities: amenitiesArray,
-          location: data.location_name || 'Unknown location',
-          propertyType: data.property_type || 'apartment'
+          amenities: amenities,
+          location: data.location_name || 'Location unavailable',
+          propertyType: data.property_type || 'Entire home'
         },
-        coordinates: {
-          lat: data.latitude || 0,
-          lng: data.longitude || 0
-        },
-        // Generate availability for now - will be replaced with real data later
-        availability: generateAvailability(data.price_per_night)
+        availability: availability,
+        coordinates: data.latitude && data.longitude 
+          ? { lat: data.latitude, lng: data.longitude }
+          : undefined,
+        status: data.status,
+        is_featured: data.is_featured
       };
-      
-      console.log(`Successfully fetched stay with ID: ${id}`);
-      return transformedData;
     } catch (error) {
-      console.error('Error in getStayById:', error);
-      throw error;
+      console.error('Error fetching stay details:', error);
+      return null;
     }
   },
   
@@ -636,7 +499,6 @@ export const stayService = {
           host_id,
           host:profiles!host_id(id, name, avatar_url),
           stay_images:stay_images(id, image_path, is_primary, display_order),
-          stay_reviews:stay_reviews(rating),
           stay_amenities:stay_amenities(amenity_id, amenities:amenities(id, name))
         `)
         .eq('is_featured', true)
@@ -653,38 +515,59 @@ export const stayService = {
         return [];
       }
       
-      // Transform data to match our interface
-      return data.map(stayData => {
-        // Get the host profile data - using type assertion to help TypeScript
-        const hostProfile = stayData.host as UserProfile;
-        const userProfile = hostProfile || { name: 'Host', avatar_url: '' };
+      // Process the data into the right format with actual review data
+      const processedData = await Promise.all(data.map(async (stayData: any) => {
+        // Get the host profile data
+        let hostData: any = stayData.host;
+        if (Array.isArray(hostData) && hostData.length > 0) {
+          hostData = hostData[0];
+        }
+        
+        const userProfile = {
+          id: (hostData && hostData.id) || undefined,
+          name: (hostData && hostData.name) || 'Host',
+          avatar_url: (hostData && hostData.avatar_url) || null
+        };
         
         const stayImages = Array.isArray(stayData.stay_images) ? stayData.stay_images : [];
-        const stayReviews = Array.isArray(stayData.stay_reviews) ? stayData.stay_reviews : [];
         
-        // Calculate average rating from reviews
-        const averageRating = stayReviews.length > 0
-          ? stayReviews.reduce((sum, review: any) => sum + review.rating, 0) / stayReviews.length
-          : 4.7;
+        // Get real ratings and review count from reviews table
+        const { data: reviewsData, error: reviewsError } = await supabase
+          .from('reviews')
+          .select('rating')
+          .eq('target_id', stayData.id)
+          .eq('target_type', 'stay');
+
+        let averageRating = 0;
+        let reviewCount = 0;
+
+        if (!reviewsError && reviewsData) {
+          reviewCount = reviewsData.length;
+          if (reviewCount > 0) {
+            const totalRating = reviewsData.reduce((sum: number, review: any) => sum + (review.rating || 0), 0);
+            averageRating = parseFloat((totalRating / reviewCount).toFixed(1));
+          }
+        }
+        
+        if (averageRating === 0) {
+          averageRating = 4.7; // Default if no reviews
+        }
         
         // Find primary image or use the first one
-        const primaryImage = stayImages.find(img => img.is_primary) || stayImages[0];
+        const primaryImage = stayImages.find((img: any) => img.is_primary) || stayImages[0];
         
-        // Parse amenities - handle cases where it might be a string, array, or null
+        // Parse amenities from stay_amenities
         let amenitiesArray: string[] = [];
-        if (stayData.amenities) {
-          if (Array.isArray(stayData.amenities)) {
-            amenitiesArray = stayData.amenities;
-          } else if (typeof stayData.amenities === 'string') {
-            try {
-              // Try parsing if it's a JSON string
-              const parsed = JSON.parse(stayData.amenities);
-              amenitiesArray = Array.isArray(parsed) ? parsed : [];
-            } catch (e) {
-              // If not valid JSON, split by comma if it's a comma-separated string
-              amenitiesArray = stayData.amenities.split(',').map(item => item.trim());
-            }
-          }
+        if (stayData.stay_amenities && Array.isArray(stayData.stay_amenities)) {
+          amenitiesArray = stayData.stay_amenities
+            .filter((item: any) => item.amenities && typeof item.amenities === 'object')
+            .map((item: any) => {
+              if (item.amenities && 'name' in item.amenities) {
+                return String(item.amenities.name);
+              }
+              return '';
+            })
+            .filter(Boolean);
         }
         
         // Default amenities if none are provided
@@ -694,11 +577,11 @@ export const stayService = {
         
         // Process the image URLs into our desired format
         const processedImages = stayImages
-          .map(img => ({
+          .map((img: any) => ({
             url: getFullImageUrl(img.image_path),
             order: img.display_order || 0
           }))
-          .sort((a, b) => (a.order || 0) - (b.order || 0));
+          .sort((a: any, b: any) => (a.order || 0) - (b.order || 0));
           
         // If no images are found, add a placeholder image
         if (processedImages.length === 0) {
@@ -718,10 +601,11 @@ export const stayService = {
             ? getFullImageUrl(primaryImage?.image_path || '') 
             : processedImages[0].url,
           host: {
-            name: userProfile.name || 'Host',
+            id: userProfile.id,
+            name: userProfile.name,
             image: getFullImageUrl(userProfile.avatar_url || ''),
-            rating: parseFloat(averageRating.toFixed(1)),
-            reviews: stayReviews.length || Math.floor(Math.random() * 50) + 10
+            rating: averageRating,
+            reviews: reviewCount
           },
           host_id: stayData.host_id,
           details: {
@@ -735,7 +619,12 @@ export const stayService = {
           },
           availability: generateAvailability(stayData.price_per_night)
         };
-      });
+      }));
+      
+      // Sort featured stays by rating (highest first)
+      processedData.sort((a, b) => b.host.rating - a.host.rating);
+      
+      return processedData;
     } catch (error) {
       console.error('Error in getFeaturedStays:', error);
       throw error;
