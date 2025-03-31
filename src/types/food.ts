@@ -15,7 +15,6 @@ export interface FoodExperience {
     image: string;
     rating: number;
     reviews: number;
-    phone?: string; // Added missing phone property
   };
   details: {
     duration: string;
@@ -54,4 +53,4 @@ export interface FoodBooking {
   guest_count: number;
   total_price: number;
   status: 'pending' | 'confirmed' | 'cancelled';
-}
+} 

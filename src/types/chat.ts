@@ -68,4 +68,4 @@ export interface ChatInterfaceProps {
 export interface ConversationResponse {
   conversationId: string;
   isNew: boolean;
-}
+} 

@@ -1,28 +1,38 @@
-
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { 
-  Loader2, PlusCircle, Utensils, Home as HomeIcon, Star,
-  RefreshCw, DollarSign, Users, Calendar, Hotel, MessageCircle
-} from "lucide-react"; // Added missing icons
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"; // Added missing components
+  Home, Utensils, Hotel, Plus, ArrowRight, 
+  DollarSign, Users, Calendar, Star, RefreshCw,
+  MessageCircle
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { getHostExperiences, getHostStays } from "@/services/hostService";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ConversationsList } from "@/components/chat/ConversationsList";
 
+// Import our service functions
+import { 
+  getHostFoodExperiences, 
+  changeFoodExperienceStatus, 
+  deleteFoodExperience,
+  getHostStays,
+  changeStayStatus,
+  deleteStay
+} from "@/services/hostService";
+
+// Define a type that matches what the backend returns
 interface HostFoodExperience {
-  id: string;
+  id: string | number;
   title: string;
   description: string;
-  status: "published" | "archived" | "draft";
+  status: 'draft' | 'published' | 'archived';
   images: {
-    id: any;
-    url: any;
-    order: any;
-    is_primary: any;
+    id: string;
+    url: string;
+    order: number;
+    is_primary: boolean;
   }[];
   price_per_person: number;
   cuisine_type: string;
@@ -39,140 +49,129 @@ interface HostFoodExperience {
   };
 }
 
+// Define a type for stays
 interface HostStay {
-  id: string;
+  id: string | number;
   title: string;
   description: string;
-  status: "published" | "archived" | "draft";
+  status: 'draft' | 'published' | 'archived';
   images: {
-    id: any;
-    url: any;
-    order: any;
-    is_primary: any;
+    id: string;
+    url: string;
+    order: number;
+    is_primary: boolean;
   }[];
   price_per_night: number;
   property_type: string;
   location_name: string;
   max_guests: number;
   bedrooms: number;
+  beds: number;
   bathrooms: number;
   created_at: string;
   updated_at: string;
-  details: {
-    bedrooms: number;
-    bathrooms: number;
-    beds: number;
-    maxGuests: number;
-    propertyType: string;
-    amenities: string[];
-    location: string;
-  };
 }
 
-export default function HostDashboard() {
+const HostDashboard = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [foodExperiences, setFoodExperiences] = useState<HostFoodExperience[]>([]);
   const [stays, setStays] = useState<HostStay[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("listings"); // Added missing state
-  
-  // Add missing handler functions
-  const handleFoodExperienceStatusChange = (id: string, status: "published" | "archived" | "draft") => {
-    console.log(`Changing food experience ${id} status to ${status}`);
-    // Implementation would update status in database
-  };
-  
-  const handleStayStatusChange = (id: string, status: "published" | "archived" | "draft") => {
-    console.log(`Changing stay ${id} status to ${status}`);
-    // Implementation would update status in database
-  };
-  
-  const handleDeleteFoodExperience = (id: string) => {
-    console.log(`Deleting food experience ${id}`);
-    // Implementation would delete from database
-  };
-  
-  const handleDeleteStay = (id: string) => {
-    console.log(`Deleting stay ${id}`);
-    // Implementation would delete from database
-  };
-  
-  const ConversationsList = () => {
-    return (
-      <div className="p-4 text-center">
-        <p className="text-muted-foreground">Your conversations will appear here</p>
-      </div>
-    );
-  };
-  
+  const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<string>('listings');
+
   useEffect(() => {
-    const fetchHostData = async () => {
-      if (!user?.id) return;
-      
-      try {
-        setLoading(true);
-        
-        // Fetch food experiences
-        const foodData = await getHostExperiences(user.id);
-        if (foodData) {
-          // Process to ensure status is valid enum value and add missing details property
-          const processedFoodData = foodData.map(item => ({
-            ...item,
-            status: (item.status as "published" | "archived" | "draft") || "draft",
-            images: item.food_experience_images || [],
-            details: {
-              duration: item.duration || '2 hours',
-              groupSize: `Max ${item.max_guests || 8} guests`,
-              includes: ['Food', 'Beverages'],
-              language: item.language || 'English',
-              location: `${item.city}, ${item.state}`,
-            }
-          })) as HostFoodExperience[];
-          
-          setFoodExperiences(processedFoodData);
-        }
-        
-        // Fetch stays
-        const staysData = await getHostStays(user.id);
-        if (staysData) {
-          // Process to ensure status is valid enum value and add missing details property
-          const processedStaysData = staysData.map(item => ({
-            ...item,
-            status: (item.status as "published" | "archived" | "draft") || "draft",
-            images: item.stay_images || [],
-            details: {
-              bedrooms: item.bedrooms || 1,
-              bathrooms: item.bathrooms || 1, 
-              beds: item.beds || 1,
-              maxGuests: item.max_guests || 2,
-              propertyType: item.property_type || 'apartment',
-              amenities: typeof item.amenities === 'string' 
-                ? item.amenities.split(',')
-                : ['Wi-Fi', 'Kitchen'],
-              location: item.location_name || `${item.city}, ${item.state}`
-            }
-          })) as HostStay[];
-          
-          setStays(processedStaysData);
-        }
-      } catch (error) {
-        console.error('Error fetching host data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchHostData();
-  }, [user]);
-  
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center min-h-screen">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
+    fetchFoodExperiences();
+    fetchStays();
+  }, []);
+
+  const fetchFoodExperiences = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getHostFoodExperiences();
+      setFoodExperiences(data);
+    } catch (err) {
+      console.error('Error fetching food experiences:', err);
+      setError('Failed to load your food experiences. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchStays = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await getHostStays();
+      setStays(data);
+    } catch (err) {
+      console.error('Error fetching stays:', err);
+      setError('Failed to load your stays. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFoodExperienceStatusChange = async (id: string | number, status: 'draft' | 'published' | 'archived') => {
+    try {
+      await changeFoodExperienceStatus(id.toString(), status);
+      // Update local state
+      setFoodExperiences(prev => 
+        prev.map(exp => 
+          exp.id === id ? { ...exp, status } : exp
+        )
+      );
+    } catch (err) {
+      console.error('Error changing status:', err);
+      setError('Failed to update status. Please try again.');
+    }
+  };
+
+  const handleStayStatusChange = async (id: string | number, status: 'draft' | 'published' | 'archived') => {
+    try {
+      await changeStayStatus(id.toString(), status);
+      // Update local state
+      setStays(prev => 
+        prev.map(stay => 
+          stay.id === id ? { ...stay, status } : stay
+        )
+      );
+    } catch (err) {
+      console.error('Error changing stay status:', err);
+      setError('Failed to update status. Please try again.');
+    }
+  };
+
+  const handleDeleteFoodExperience = async (id: string | number) => {
+    if (!window.confirm('Are you sure you want to delete this food experience? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await deleteFoodExperience(id.toString());
+      // Remove from local state
+      setFoodExperiences(prev => prev.filter(exp => exp.id !== id));
+    } catch (err) {
+      console.error('Error deleting food experience:', err);
+      setError('Failed to delete food experience. Please try again.');
+    }
+  };
+
+  const handleDeleteStay = async (id: string | number) => {
+    if (!window.confirm('Are you sure you want to delete this stay? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      await deleteStay(id.toString());
+      // Remove from local state
+      setStays(prev => prev.filter(stay => stay.id !== id));
+    } catch (err) {
+      console.error('Error deleting stay:', err);
+      setError('Failed to delete stay. Please try again.');
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
@@ -196,6 +195,15 @@ export default function HostDashboard() {
     });
   };
 
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  // Calculate counts for the stats
   const foodExperiencePublished = foodExperiences.filter(exp => exp.status === 'published').length;
   const foodExperienceDraft = foodExperiences.filter(exp => exp.status === 'draft').length;
   const foodExperienceArchived = foodExperiences.filter(exp => exp.status === 'archived').length;
@@ -211,6 +219,7 @@ export default function HostDashboard() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-sage-50 to-terracotta-50 p-6">
+      {/* Header Section */}
       <div className="max-w-7xl mx-auto mb-8">
         <div className="flex justify-between items-center">
           <div>
@@ -223,19 +232,25 @@ export default function HostDashboard() {
               onClick={() => navigate('/')}
               className="flex items-center gap-2"
             >
-              <HomeIcon className="w-4 h-4" />
+              <Home className="w-4 h-4" />
               Back to Home
             </Button>
             <Button 
               onClick={() => navigate('/host/food/new')}
               className="flex items-center gap-2"
             >
-              <PlusCircle className="w-4 h-4" />
+              <Plus className="w-4 h-4" />
               New Experience
             </Button>
           </div>
         </div>
       </div>
+
+      {error && (
+        <Alert variant="destructive" className="mb-8 max-w-7xl mx-auto">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
       {/* Stats Overview */}
       <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
@@ -331,7 +346,7 @@ export default function HostDashboard() {
                       onClick={() => navigate('/host/food/new')}
                       className="flex items-center gap-2"
                     >
-                      Add New <PlusCircle className="w-4 h-4" />
+                      Add New <Plus className="w-4 h-4" />
                     </Button>
                   </div>
                 </CardHeader>
@@ -448,7 +463,7 @@ export default function HostDashboard() {
                       onClick={() => navigate('/host/stay/new')}
                       className="flex items-center gap-2"
                     >
-                      Add New <PlusCircle className="w-4 h-4" />
+                      Add New <Plus className="w-4 h-4" />
                     </Button>
                   </div>
                 </CardHeader>
@@ -570,4 +585,6 @@ export default function HostDashboard() {
       </div>
     </div>
   );
-}
+};
+
+export default HostDashboard; 

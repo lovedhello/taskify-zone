@@ -62,6 +62,9 @@ const FoodDetails = () => {
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
     libraries,
     id: 'google-map-script',
+    onError: () => {
+      console.warn('Google Maps API failed to load. Using fallback location display.');
+    }
   });
 
   const getFullImageUrl = (url: string) => {
@@ -138,17 +141,6 @@ const FoodDetails = () => {
     setSelectedImageIndex(index);
     setIsImageDialogOpen(true);
   };
-
-  const renderChatButton = () => (
-    <ChatButton
-      hostId={experience?.host?.id || ''}
-      listingId={id || ''}
-      listingType="food"
-      listingTitle={experience?.title || ''}
-    >
-      Message Host
-    </ChatButton>
-  );
 
   if (loading) {
     return (
@@ -233,7 +225,7 @@ const FoodDetails = () => {
         </div>
 
         <div className="mb-12">
-          {experience?.images && experience.images.length > 0 && (
+          {experience.images && experience.images.length > 0 && (
             <ImageGallery
               images={experience.images.map((img, index) => ({
                 url: img.url,
@@ -317,8 +309,16 @@ const FoodDetails = () => {
                   </p>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {renderChatButton()}
-                    <a href={`tel:${experience?.host?.phone || ''}`}>
+                    <ChatButton
+                      hostId={experience.host?.id}
+                      listingId={id || ''}
+                      listingType="food_experience"
+                      listingTitle={experience.title}
+                      className="w-full"
+                    >
+                      Message Host
+                    </ChatButton>
+                    <a href={`tel:${experience.host.phone || ''}`}>
                       <Button variant="outline" className="w-full">
                         <Phone className="w-4 h-4 mr-2" />
                         Call Host
@@ -452,9 +452,18 @@ const FoodDetails = () => {
               <Separator className="my-4" />
               
               <div className="grid grid-cols-1 gap-3">
-                {renderChatButton()}
+                <ChatButton
+                  hostId={experience.host?.id}
+                  listingId={id || ''}
+                  listingType="food_experience"
+                  listingTitle={experience.title}
+                  variant="outline"
+                >
+                  <MessageCircle className="w-4 h-4 mr-2" />
+                  Message Host
+                </ChatButton>
                 
-                <a href={`tel:${experience?.host?.phone || ''}`}>
+                <a href={`tel:${experience.host.phone || ''}`}>
                   <Button variant="outline" className="w-full">
                     <Phone className="w-4 h-4 mr-2" />
                     Call Host
@@ -466,6 +475,8 @@ const FoodDetails = () => {
                 Contact the host to arrange your visit
               </p>
             </Card>
+            
+            
           </div>
         </div>
       </div>
